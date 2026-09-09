@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -210,6 +210,9 @@ export default function HomeScreen() {
   const [winningIndexes, setWinningIndexes] =
     useState([]);
 
+  const [autoSpin, setAutoSpin] =
+    useState(false);
+
   const reelAnimations = useRef(
     Array.from(
       { length: 5 },
@@ -264,44 +267,4 @@ export default function HomeScreen() {
       freeSpins <= 0 &&
       balance < bet
     ) {
-      setMessage("NOT ENOUGH CREDITS");
-      return;
-    }
-
-    setSpinning(true);
-    setWinningIndexes([]);
-    setMessage("SPINNING...");
-
-    let currentBalance = balance;
-
-    const usingFreeSpin =
-      freeSpins > 0;
-
-    if (usingFreeSpin) {
-      setFreeSpins((value) =>
-        Math.max(0, value - 1)
-      );
-    } else {
-      currentBalance -= bet;
-    }
-
-    runReelAnimations(() => {
-      const newReels =
-        createReels();
-
-      setReels(newReels);
-
-      const result =
-        checkWins(newReels, bet);
-
-      const globes =
-        newReels.filter(
-          (symbol) => symbol === GLOBE
-        ).length;
-
-      let awardedFreeSpins = 0;
-
-      if (globes === 3) {
-        awardedFreeSpins = 8;
-      } else if (globes === 4) {
-       
+      set
