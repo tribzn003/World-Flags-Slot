@@ -50,6 +50,8 @@ export default function HomeScreen() {
   const [winMissionClaimed, setWinMissionClaimed] =
     useState(false);
 
+  const [vip, setVip] = useState(false);
+
   const [message, setMessage] =
     useState("WORLD FLAGS SLOT");
 
@@ -67,6 +69,9 @@ export default function HomeScreen() {
     useState(false);
 
   const [missionsVisible, setMissionsVisible] =
+    useState(false);
+
+  const [shopVisible, setShopVisible] =
     useState(false);
 
   const [bigWinVisible, setBigWinVisible] =
@@ -162,6 +167,10 @@ export default function HomeScreen() {
             data.winMissionClaimed
           );
         }
+
+        if (typeof data.vip === "boolean") {
+          setVip(data.vip);
+        }
       }
 
       setLoaded(true);
@@ -186,6 +195,7 @@ export default function HomeScreen() {
       missionWins,
       spinMissionClaimed,
       winMissionClaimed,
+      vip,
     });
   }, [
     loaded,
@@ -201,6 +211,7 @@ export default function HomeScreen() {
     missionWins,
     spinMissionClaimed,
     winMissionClaimed,
+    vip,
   ]);
 
   useEffect(() => {
@@ -264,8 +275,7 @@ export default function HomeScreen() {
 
     if (
       lastDailyBonus > 0 &&
-      now - lastDailyBonus <
-        DAY * 2
+      now - lastDailyBonus < DAY * 2
     ) {
       nextStreak =
         dailyStreak + 1;
@@ -274,10 +284,14 @@ export default function HomeScreen() {
     const cappedStreak =
       Math.min(nextStreak, 7);
 
-    const bonus =
+    let bonus =
       250 +
       level * 50 +
       cappedStreak * 50;
+
+    if (vip) {
+      bonus *= 2;
+    }
 
     setBalance(
       (value) =>
@@ -299,6 +313,47 @@ export default function HomeScreen() {
       100,
       80,
       180,
+    ]);
+  };
+
+  const buyCredits = (amount) => {
+    setBalance(
+      (value) =>
+        value + amount
+    );
+
+    setMessage(
+      `SHOP +${amount} CREDITS`
+    );
+
+    Vibration.vibrate(120);
+  };
+
+  const activateVip = () => {
+    if (vip) {
+      setMessage(
+        "VIP ALREADY ACTIVE"
+      );
+
+      return;
+    }
+
+    setVip(true);
+
+    setBalance(
+      (value) =>
+        value + 10000
+    );
+
+    setMessage(
+      "👑 VIP ACTIVATED +10000"
+    );
+
+    Vibration.vibrate([
+      0,
+      150,
+      100,
+      250,
     ]);
   };
 
@@ -430,8 +485,7 @@ export default function HomeScreen() {
         setDisplayWin(value);
 
         if (
-          currentStep >=
-          steps
+          currentStep >= steps
         ) {
           clearInterval(
             winTimerRef.current
@@ -468,8 +522,7 @@ export default function HomeScreen() {
               {
                 toValue: 1,
                 duration: 200,
-                useNativeDriver:
-                  true,
+                useNativeDriver: true,
               }
             ),
 
@@ -478,8 +531,7 @@ export default function HomeScreen() {
               {
                 toValue: -1,
                 duration: 200,
-                useNativeDriver:
-                  true,
+                useNativeDriver: true,
               }
             ),
 
@@ -488,8 +540,7 @@ export default function HomeScreen() {
               {
                 toValue: 1,
                 duration: 200,
-                useNativeDriver:
-                  true,
+                useNativeDriver: true,
               }
             ),
 
@@ -498,8 +549,7 @@ export default function HomeScreen() {
               {
                 toValue: 0,
                 duration: 200,
-                useNativeDriver:
-                  true,
+                useNativeDriver: true,
               }
             ),
           ])
@@ -516,6 +566,7 @@ export default function HomeScreen() {
       bigWinVisible ||
       paytableVisible ||
       missionsVisible ||
+      shopVisible ||
       !loaded
     ) {
       return;
@@ -539,3 +590,170 @@ export default function HomeScreen() {
     setDisplayWin(0);
 
     setMessage(
+      "SPINNING..."
+    );
+
+    let currentBalance =
+      balance;
+
+    let currentJackpot =
+      jackpot;
+
+    const usingFreeSpin =
+      freeSpins > 0;
+
+    if (usingFreeSpin) {
+      setFreeSpins(
+        (value) =>
+          Math.max(
+            0,
+            value - 1
+          )
+      );
+    } else {
+      currentBalance -=
+        bet;
+
+      currentJackpot +=
+        Math.max(
+          1,
+          Math.floor(
+            bet * 0.05
+          )
+        );
+
+      addXp(
+        vip
+          ? 15
+          : 10
+      );
+
+      setMissionSpins(
+        (value) =>
+          Math.min(
+            20,
+            value + 1
+          )
+      );
+    }
+
+    runReelAnimations(
+      () => {
+        const newReels =
+          createReels();
+
+        setReels(
+          newReels
+        );
+
+        const result =
+          checkWins(
+            newReels,
+            bet
+          );
+
+        const globes =
+          newReels.filter(
+            (symbol) =>
+              symbol === GLOBE
+          ).length;
+
+        const diamonds =
+          newReels.filter(
+            (symbol) =>
+              symbol === JACKPOT
+          ).length;
+
+        let awardedFreeSpins =
+          0;
+
+        let jackpotWin =
+          0;
+
+        if (globes === 3) {
+          awardedFreeSpins =
+            8;
+        } else if (
+          globes === 4
+        ) {
+          awardedFreeSpins =
+            12;
+        } else if (
+          globes >= 5
+        ) {
+          awardedFreeSpins =
+            20;
+        }
+
+        if (
+          diamonds >= 3
+        ) {
+          jackpotWin =
+            currentJackpot;
+
+          currentJackpot =
+            5000;
+        }
+
+        if (
+          awardedFreeSpins > 0
+        ) {
+          setFreeSpins(
+            (value) =>
+              value +
+              awardedFreeSpins
+          );
+        }
+
+        const totalPaid =
+          result.totalWin +
+          jackpotWin;
+
+        currentBalance +=
+          totalPaid;
+
+        setBalance(
+          currentBalance
+        );
+
+        setJackpot(
+          currentJackpot
+        );
+
+        setWinningIndexes(
+          result.winningIndexes
+        );
+
+        animateWinCounter(
+          totalPaid
+        );
+
+        if (
+          result.totalWin > 0 ||
+          jackpotWin > 0
+        ) {
+          setMissionWins(
+            (value) =>
+              Math.min(
+                5,
+                value + 1
+              )
+          );
+        }
+
+        if (
+          jackpotWin > 0
+        ) {
+          Vibration.vibrate([
+            0,
+            200,
+            100,
+            300,
+            100,
+            500,
+          ]);
+
+          runWinAnimation();
+
+          setMessage(
+            `💎 JACKPOT ${jackpotWin}!
