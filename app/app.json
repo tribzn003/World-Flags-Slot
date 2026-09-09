@@ -1,1 +1,17 @@
-
+{
+  "expo": {
+    "name": "World Flags Slot",
+    "slug": "world-flags-slot",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "worldflagsslot",
+    "plugins": [
+      "expo-router"
+    ],
+    "android": {
+      "package": "com.worldflagsslot.app",
+      "versionCode": 1
+    }
+  }
+}
