@@ -54,7 +54,6 @@ const PAYLINES = [
   [0, 1, 2, 3, 4],
   [5, 6, 7, 8, 9],
   [10, 11, 12, 13, 14],
-
   [0, 6, 12, 8, 4],
   [10, 6, 2, 8, 14],
 ];
@@ -66,13 +65,8 @@ function randomFlag() {
 function randomSymbol() {
   const roll = Math.random();
 
-  if (roll < 0.045) {
-    return GLOBE;
-  }
-
-  if (roll < 0.085) {
-    return WILD;
-  }
+  if (roll < 0.045) return GLOBE;
+  if (roll < 0.085) return WILD;
 
   return randomFlag();
 }
@@ -83,7 +77,6 @@ function createReels() {
     () => randomSymbol()
   );
 
-  // Beta win frequency for testing
   if (Math.random() < 0.25) {
     const line =
       PAYLINES[
@@ -106,8 +99,7 @@ function createReels() {
       reels[line[i]] = flag;
     }
 
-    // Occasionally place WILD inside a winning line
-    if (count >= 3 && Math.random() < 0.3) {
+    if (Math.random() < 0.3) {
       const wildPosition =
         1 + Math.floor(Math.random() * (count - 1));
 
@@ -172,7 +164,6 @@ function evaluateLine(reels, line, bet) {
 
 function checkWins(reels, bet) {
   let totalWin = 0;
-
   const winningIndexes = [];
 
   PAYLINES.forEach((line) => {
@@ -219,18 +210,98 @@ export default function HomeScreen() {
   const [winningIndexes, setWinningIndexes] =
     useState([]);
 
-  const spinAnim = useRef(
-    new Animated.Value(0)
+  const reelAnimations = useRef(
+    Array.from(
+      { length: 5 },
+      () => new Animated.Value(0)
+    )
   ).current;
 
-  const runSpinAnimation = (callback) => {
-    spinAnim.setValue(0);
+  const runReelAnimations = (callback) => {
+    reelAnimations.forEach((anim) => {
+      anim.setValue(0);
+    });
 
-    Animated.sequence([
-      Animated.timing(spinAnim, {
-        toValue: 1,
-        duration: 170,
-        useNativeDriver: true,
-      }),
+    const animations =
+      reelAnimations.map(
+        (anim, index) =>
+          Animated.sequence([
+            Animated.delay(index * 170),
 
-      Animated.timing(spin
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+
+            Animated.timing(anim, {
+              toValue: -1,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+
+            Animated.timing(anim, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+          ])
+      );
+
+    Animated.parallel(animations).start(callback);
+  };
+
+  const spin = () => {
+    if (spinning) return;
+
+    if (
+      freeSpins <= 0 &&
+      balance < bet
+    ) {
+      setMessage("NOT ENOUGH CREDITS");
+      return;
+    }
+
+    setSpinning(true);
+    setWinningIndexes([]);
+    setMessage("SPINNING...");
+
+    let currentBalance = balance;
+
+    const usingFreeSpin =
+      freeSpins > 0;
+
+    if (usingFreeSpin) {
+      setFreeSpins((value) =>
+        Math.max(0, value - 1)
+      );
+    } else {
+      currentBalance -= bet;
+    }
+
+    runReelAnimations(() => {
+      const newReels =
+        createReels();
+
+      setReels(newReels);
+
+      const result =
+        checkWins(newReels, bet);
+
+      const globes =
+        newReels.filter(
+          (symbol) => symbol === GLOBE
+        ).length;
+
+      let awardedFreeSpins = 0;
+
+      if (globes === 3) {
+        awardedFreeSpins = 8;
+      } else if (globes === 4) {
+       
