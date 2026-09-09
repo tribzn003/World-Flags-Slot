@@ -102,9 +102,7 @@ function getCodeFromFlag(flag) {
 function getFlagTier(flag) {
   const code = getCodeFromFlag(flag);
 
-  if (!code) {
-    return "normal";
-  }
+  if (!code) return "normal";
 
   if (PREMIUM_CODES.includes(code)) {
     return "premium";
@@ -133,7 +131,7 @@ function createReels() {
     () => randomSymbol()
   );
 
-  // BETA: povećana šansa za dobitak radi testiranja
+  // BETA: češći dobitak radi testiranja
   if (Math.random() < 0.25) {
     const line =
       PAYLINES[
@@ -141,7 +139,6 @@ function createReels() {
       ];
 
     const flag = randomFlag();
-
     const roll = Math.random();
 
     let count = 3;
@@ -246,14 +243,41 @@ function checkWins(reels, bet) {
     result.indexes.forEach(
       (index) => {
         if (
-          !winningIndexes.includes(
-            index
-          )
+          !winningIndexes.includes(index)
         ) {
-          winningIndexes.push(
-            index
-          );
+          winningIndexes.push(index);
         }
       }
     );
   });
+
+  return {
+    totalWin,
+    winningIndexes,
+  };
+}
+
+export default function HomeScreen() {
+  const [reels, setReels] =
+    useState(createReels());
+
+  const [balance, setBalance] =
+    useState(1000);
+
+  const [bet, setBet] =
+    useState(10);
+
+  const [freeSpins, setFreeSpins] =
+    useState(0);
+
+  const [jackpot, setJackpot] =
+    useState(5000);
+
+  const [message, setMessage] =
+    useState("WORLD FLAGS SLOT");
+
+  const [spinning, setSpinning] =
+    useState(false);
+
+  const [
+   
