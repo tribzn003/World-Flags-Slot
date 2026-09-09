@@ -36,18 +36,35 @@ export const WILD = "⭐";
 export const JACKPOT = "💎";
 
 export const PREMIUM_CODES = [
-  "US","GB","FR","DE","IT","JP","CN","BR","IN","CA"
+  "US","GB","FR","DE","IT",
+  "JP","CN","BR","IN","CA"
 ];
 
 export const MID_CODES = [
-  "RS","ES","PT","NL","BE","CH","AT","SE","NO","DK",
-  "FI","GR","TR","AU","NZ","MX","AR","KR","SA","AE"
+  "RS","ES","PT","NL","BE",
+  "CH","AT","SE","NO","DK",
+  "FI","GR","TR","AU","NZ",
+  "MX","AR","KR","SA","AE"
 ];
 
 export const PAYOUTS = {
-  normal: { 3: 3, 4: 8, 5: 20 },
-  mid: { 3: 4, 4: 12, 5: 30 },
-  premium: { 3: 5, 4: 15, 5: 40 },
+  normal: {
+    3: 3,
+    4: 8,
+    5: 20,
+  },
+
+  mid: {
+    3: 4,
+    4: 12,
+    5: 30,
+  },
+
+  premium: {
+    3: 5,
+    4: 15,
+    5: 40,
+  },
 };
 
 export const PAYLINES = [
@@ -59,21 +76,43 @@ export const PAYLINES = [
 ];
 
 export function randomFlag() {
-  return flags[Math.floor(Math.random() * flags.length)];
+  return flags[
+    Math.floor(
+      Math.random() * flags.length
+    )
+  ];
 }
 
 export function getCodeFromFlag(flag) {
-  const index = flags.indexOf(flag);
-  if (index === -1) return null;
+  const index =
+    flags.indexOf(flag);
+
+  if (index === -1) {
+    return null;
+  }
+
   return countryCodes[index];
 }
 
 export function getFlagTier(flag) {
-  const code = getCodeFromFlag(flag);
+  const code =
+    getCodeFromFlag(flag);
 
-  if (!code) return "normal";
-  if (PREMIUM_CODES.includes(code)) return "premium";
-  if (MID_CODES.includes(code)) return "mid";
+  if (!code) {
+    return "normal";
+  }
+
+  if (
+    PREMIUM_CODES.includes(code)
+  ) {
+    return "premium";
+  }
+
+  if (
+    MID_CODES.includes(code)
+  ) {
+    return "mid";
+  }
 
   return "normal";
 }
@@ -81,78 +120,139 @@ export function getFlagTier(flag) {
 export function randomSymbol() {
   const roll = Math.random();
 
-  if (roll < 0.02) return JACKPOT;
-  if (roll < 0.06) return GLOBE;
-  if (roll < 0.10) return WILD;
+  if (roll < 0.02) {
+    return JACKPOT;
+  }
+
+  if (roll < 0.06) {
+    return GLOBE;
+  }
+
+  if (roll < 0.10) {
+    return WILD;
+  }
 
   return randomFlag();
 }
 
 export function createReels() {
-  const reels = Array.from(
-    { length: 15 },
-    () => randomSymbol()
-  );
+  const reels =
+    Array.from(
+      { length: 15 },
+      () => randomSymbol()
+    );
+
+  /*
+    TEST / BETA MODE
+
+    Ово намерно додаје већу
+    учесталост добитака како
+    би игра могла лакше да се тестира.
+
+    За праву real-money верзију
+    ово мора бити замењено
+    сертификованом RNG логиком.
+  */
 
   if (Math.random() < 0.25) {
     const line =
       PAYLINES[
-        Math.floor(Math.random() * PAYLINES.length)
+        Math.floor(
+          Math.random() *
+          PAYLINES.length
+        )
       ];
 
-    const flag = randomFlag();
+    const flag =
+      randomFlag();
 
-    const roll = Math.random();
+    const roll =
+      Math.random();
 
     let count = 3;
 
     if (roll > 0.85) {
       count = 5;
-    } else if (roll > 0.60) {
+    } else if (
+      roll > 0.60
+    ) {
       count = 4;
     }
 
-    for (let i = 0; i < count; i++) {
-      reels[line[i]] = flag;
+    for (
+      let i = 0;
+      i < count;
+      i++
+    ) {
+      reels[line[i]] =
+        flag;
     }
 
-    if (Math.random() < 0.30) {
+    if (
+      Math.random() < 0.30
+    ) {
       const wildPosition =
-        1 + Math.floor(Math.random() * (count - 1));
+        1 +
+        Math.floor(
+          Math.random() *
+          (count - 1)
+        );
 
-      reels[line[wildPosition]] = WILD;
+      reels[
+        line[wildPosition]
+      ] = WILD;
     }
   }
 
   return reels;
 }
 
-export function evaluateLine(reels, line, bet) {
-  const lineSymbols = line.map(
-    (index) => reels[index]
-  );
+export function evaluateLine(
+  reels,
+  line,
+  bet
+) {
+  const lineSymbols =
+    line.map(
+      (index) =>
+        reels[index]
+    );
 
   let baseSymbol = null;
 
-  for (const symbol of lineSymbols) {
+  for (
+    const symbol
+    of lineSymbols
+  ) {
     if (
       symbol !== WILD &&
       symbol !== GLOBE &&
       symbol !== JACKPOT
     ) {
-      baseSymbol = symbol;
+      baseSymbol =
+        symbol;
+
       break;
     }
   }
 
   if (!baseSymbol) {
-    return { win: 0, indexes: [] };
+    return {
+      win: 0,
+      indexes: [],
+    };
   }
 
   let count = 0;
 
-  for (let i = 0; i < lineSymbols.length; i++) {
-    const symbol = lineSymbols[i];
+  for (
+    let i = 0;
+    i <
+    lineSymbols.length;
+    i++
+  ) {
+    const symbol =
+      lineSymbols[i];
 
     if (
       symbol === baseSymbol ||
@@ -165,11 +265,21 @@ export function evaluateLine(reels, line, bet) {
   }
 
   if (count >= 3) {
-    const tier = getFlagTier(baseSymbol);
+    const tier =
+      getFlagTier(
+        baseSymbol
+      );
 
     return {
-      win: bet * PAYOUTS[tier][count],
-      indexes: line.slice(0, count),
+      win:
+        bet *
+        PAYOUTS[tier][count],
+
+      indexes:
+        line.slice(
+          0,
+          count
+        ),
     };
   }
 
@@ -179,22 +289,41 @@ export function evaluateLine(reels, line, bet) {
   };
 }
 
-export function checkWins(reels, bet) {
+export function checkWins(
+  reels,
+  bet
+) {
   let totalWin = 0;
+
   const winningIndexes = [];
 
-  PAYLINES.forEach((line) => {
-    const result =
-      evaluateLine(reels, line, bet);
+  PAYLINES.forEach(
+    (line) => {
+      const result =
+        evaluateLine(
+          reels,
+          line,
+          bet
+        );
 
-    totalWin += result.win;
+      totalWin +=
+        result.win;
 
-    result.indexes.forEach((index) => {
-      if (!winningIndexes.includes(index)) {
-        winningIndexes.push(index);
-      }
-    });
-  });
+      result.indexes.forEach(
+        (index) => {
+          if (
+            !winningIndexes.includes(
+              index
+            )
+          ) {
+            winningIndexes.push(
+              index
+            );
+          }
+        }
+      );
+    }
+  );
 
   return {
     totalWin,
