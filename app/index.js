@@ -15,12 +15,50 @@ const symbols = [
   "🌐"
 ];
 
+const PAYOUTS = {
+  3: 3,
+  4: 8,
+  5: 20,
+};
+
 function randomSymbol() {
   return symbols[Math.floor(Math.random() * symbols.length)];
 }
 
 function createReels() {
   return Array.from({ length: 15 }, () => randomSymbol());
+}
+
+function getRows(reels) {
+  return [
+    reels.slice(0, 5),
+    reels.slice(5, 10),
+    reels.slice(10, 15),
+  ];
+}
+
+function checkLine(row, bet) {
+  const first = row[0];
+
+  if (first === "🌐") {
+    return 0;
+  }
+
+  let count = 1;
+
+  for (let i = 1; i < row.length; i++) {
+    if (row[i] === first) {
+      count++;
+    } else {
+      break;
+    }
+  }
+
+  if (count >= 3) {
+    return bet * PAYOUTS[count];
+  }
+
+  return 0;
 }
 
 export default function HomeScreen() {
@@ -36,25 +74,52 @@ export default function HomeScreen() {
       return;
     }
 
+    let currentBalance = balance;
+
     if (freeSpins > 0) {
-      setFreeSpins((v) => v - 1);
+      setFreeSpins((v) => Math.max(0, v - 1));
     } else {
-      setBalance((v) => v - bet);
+      currentBalance -= bet;
     }
 
     const newReels = createReels();
     setReels(newReels);
 
+    const rows = getRows(newReels);
+
+    let win = 0;
+
+    rows.forEach((row) => {
+      win += checkLine(row, bet);
+    });
+
     const globes = newReels.filter((x) => x === "🌐").length;
 
-    if (globes >= 3) {
-      let awarded = 8;
+    let awardedFreeSpins = 0;
 
-      if (globes === 4) awarded = 12;
-      if (globes >= 5) awarded = 20;
+    if (globes === 3) {
+      awardedFreeSpins = 8;
+    } else if (globes === 4) {
+      awardedFreeSpins = 12;
+    } else if (globes >= 5) {
+      awardedFreeSpins = 20;
+    }
 
-      setFreeSpins((v) => v + awarded);
-      setMessage(`${awarded} FREE SPINS!`);
+    if (awardedFreeSpins > 0) {
+      setFreeSpins((v) => v + awardedFreeSpins);
+    }
+
+    currentBalance += win;
+    setBalance(currentBalance);
+
+    if (win > 0 && awardedFreeSpins > 0) {
+      setMessage(
+        `WIN ${win} + ${awardedFreeSpins} FREE SPINS!`
+      );
+    } else if (win > 0) {
+      setMessage(`WIN ${win}!`);
+    } else if (awardedFreeSpins > 0) {
+      setMessage(`${awardedFreeSpins} FREE SPINS!`);
     } else {
       setMessage("Good luck!");
     }
@@ -80,10 +145,16 @@ export default function HomeScreen() {
 
       <Text style={styles.message}>{message}</Text>
 
+      <View style={styles.paytable}>
+        <Text style={styles.payText}>3 flags = ×3</Text>
+        <Text style={styles.payText}>4 flags = ×8</Text>
+        <Text style={styles.payText}>5 flags = ×20</Text>
+      </View>
+
       <View style={styles.betRow}>
         <TouchableOpacity
           style={styles.smallButton}
-          onPress={() => setBet((b) => Math.max(1, b - 5))}
+          onPress={() => setBet((b) => Math.max(5, b - 5))}
         >
           <Text style={styles.buttonText}>BET -</Text>
         </TouchableOpacity>
@@ -121,7 +192,7 @@ const styles = StyleSheet.create({
 
   info: {
     flexDirection: "row",
-    gap: 18,
+    gap: 16,
     marginBottom: 18,
   },
 
@@ -160,7 +231,19 @@ const styles = StyleSheet.create({
     color: "#ffd54a",
     fontSize: 20,
     fontWeight: "bold",
-    marginVertical: 20,
+    marginVertical: 18,
+    textAlign: "center",
+  },
+
+  paytable: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 18,
+  },
+
+  payText: {
+    color: "#b9c7d8",
+    fontSize: 13,
   },
 
   betRow: {
