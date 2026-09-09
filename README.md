@@ -1,0 +1,2 @@
+# World-Flags-Slot
+WFS
