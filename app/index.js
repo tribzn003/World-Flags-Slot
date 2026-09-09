@@ -43,6 +43,7 @@ const flags = countryCodes.map(flagEmoji);
 
 const GLOBE = "🌐";
 const WILD = "⭐";
+const JACKPOT = "💎";
 
 const PAYOUTS = {
   3: 3,
@@ -65,8 +66,9 @@ function randomFlag() {
 function randomSymbol() {
   const roll = Math.random();
 
-  if (roll < 0.045) return GLOBE;
-  if (roll < 0.085) return WILD;
+  if (roll < 0.02) return JACKPOT;
+  if (roll < 0.06) return GLOBE;
+  if (roll < 0.10) return WILD;
 
   return randomFlag();
 }
@@ -120,7 +122,8 @@ function evaluateLine(reels, line, bet) {
   for (const symbol of lineSymbols) {
     if (
       symbol !== WILD &&
-      symbol !== GLOBE
+      symbol !== GLOBE &&
+      symbol !== JACKPOT
     ) {
       baseSymbol = symbol;
       break;
@@ -201,70 +204,11 @@ export default function HomeScreen() {
   const [freeSpins, setFreeSpins] =
     useState(0);
 
+  const [jackpot, setJackpot] =
+    useState(5000);
+
   const [message, setMessage] =
     useState("WORLD FLAGS SLOT");
 
   const [spinning, setSpinning] =
-    useState(false);
-
-  const [winningIndexes, setWinningIndexes] =
-    useState([]);
-
-  const [autoSpin, setAutoSpin] =
-    useState(false);
-
-  const reelAnimations = useRef(
-    Array.from(
-      { length: 5 },
-      () => new Animated.Value(0)
-    )
-  ).current;
-
-  const runReelAnimations = (callback) => {
-    reelAnimations.forEach((anim) => {
-      anim.setValue(0);
-    });
-
-    const animations =
-      reelAnimations.map(
-        (anim, index) =>
-          Animated.sequence([
-            Animated.delay(index * 170),
-
-            Animated.timing(anim, {
-              toValue: 1,
-              duration: 200,
-              useNativeDriver: true,
-            }),
-
-            Animated.timing(anim, {
-              toValue: -1,
-              duration: 200,
-              useNativeDriver: true,
-            }),
-
-            Animated.timing(anim, {
-              toValue: 1,
-              duration: 200,
-              useNativeDriver: true,
-            }),
-
-            Animated.timing(anim, {
-              toValue: 0,
-              duration: 200,
-              useNativeDriver: true,
-            }),
-          ])
-      );
-
-    Animated.parallel(animations).start(callback);
-  };
-
-  const spin = () => {
-    if (spinning) return;
-
-    if (
-      freeSpins <= 0 &&
-      balance < bet
-    ) {
-      set
+    use
