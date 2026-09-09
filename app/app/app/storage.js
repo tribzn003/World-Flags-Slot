@@ -1,12 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export const SAVE_KEY =
-  "world_flags_slot_save_v2";
+export const SAVE_KEY = "world_flags_slot_save_v2";
 
 export async function loadGameData() {
   try {
-    const raw =
-      await AsyncStorage.getItem(SAVE_KEY);
+    const raw = await AsyncStorage.getItem(SAVE_KEY);
 
     if (!raw) {
       return null;
