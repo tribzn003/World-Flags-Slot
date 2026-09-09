@@ -80,7 +80,6 @@ function createReels() {
     () => randomSymbol()
   );
 
-  // Beta: malo češći dobici radi testiranja
   if (Math.random() < 0.25) {
     const line =
       PAYLINES[
@@ -88,6 +87,7 @@ function createReels() {
       ];
 
     const flag = randomFlag();
+
     const roll = Math.random();
 
     let count = 3;
@@ -220,6 +220,9 @@ export default function HomeScreen() {
   const [autoSpin, setAutoSpin] =
     useState(false);
 
+  const [displayWin, setDisplayWin] =
+    useState(0);
+
   const reelAnimations = useRef(
     Array.from(
       { length: 5 },
@@ -230,6 +233,8 @@ export default function HomeScreen() {
   const winAnim = useRef(
     new Animated.Value(1)
   ).current;
+
+  const winTimerRef = useRef(null);
 
   const runWinAnimation = () => {
     winAnim.setValue(1);
@@ -261,6 +266,55 @@ export default function HomeScreen() {
     ]).start();
   };
 
+  const animateWinCounter = (target) => {
+    if (winTimerRef.current) {
+      clearInterval(winTimerRef.current);
+    }
+
+    if (target <= 0) {
+      setDisplayWin(0);
+      return;
+    }
+
+    setDisplayWin(0);
+
+    const steps = 30;
+
+    let currentStep = 0;
+
+    winTimerRef.current =
+      setInterval(() => {
+        currentStep++;
+
+        const value =
+          Math.round(
+            (target * currentStep) / steps
+          );
+
+        setDisplayWin(value);
+
+        if (currentStep >= steps) {
+          clearInterval(
+            winTimerRef.current
+          );
+
+          winTimerRef.current = null;
+
+          setDisplayWin(target);
+        }
+      }, 35);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (winTimerRef.current) {
+        clearInterval(
+          winTimerRef.current
+        );
+      }
+    };
+  }, []);
+
   const runReelAnimations = (callback) => {
     reelAnimations.forEach((anim) => {
       anim.setValue(0);
@@ -287,7 +341,4 @@ export default function HomeScreen() {
             Animated.timing(anim, {
               toValue: 1,
               duration: 200,
-              useNativeDriver: true,
-            }),
-
-            Animated
+              use
