@@ -21,12 +21,12 @@ import {
   MID_CODES,
   flagEmoji,
   flags,
-} from "./gameData";
+} from "../gameData";
 
 import {
   loadGameData,
   saveGameData,
-} from "./storage";
+} from "../storage";
 
 const DAY = 86400000;
 
@@ -47,8 +47,10 @@ export default function HomeScreen() {
 
   const [missionSpins, setMissionSpins] = useState(0);
   const [missionWins, setMissionWins] = useState(0);
-  const [spinMissionClaimed, setSpinMissionClaimed] = useState(false);
-  const [winMissionClaimed, setWinMissionClaimed] = useState(false);
+  const [spinMissionClaimed, setSpinMissionClaimed] =
+    useState(false);
+  const [winMissionClaimed, setWinMissionClaimed] =
+    useState(false);
 
   const [totalSpins, setTotalSpins] = useState(0);
   const [totalWins, setTotalWins] = useState(0);
@@ -99,15 +101,23 @@ export default function HomeScreen() {
 
         setMissionSpins(data.missionSpins ?? 0);
         setMissionWins(data.missionWins ?? 0);
-        setSpinMissionClaimed(data.spinMissionClaimed ?? false);
-        setWinMissionClaimed(data.winMissionClaimed ?? false);
+
+        setSpinMissionClaimed(
+          data.spinMissionClaimed ?? false
+        );
+
+        setWinMissionClaimed(
+          data.winMissionClaimed ?? false
+        );
 
         setTotalSpins(data.totalSpins ?? 0);
         setTotalWins(data.totalWins ?? 0);
         setBiggestWin(data.biggestWin ?? 0);
         setBiggestJackpot(data.biggestJackpot ?? 0);
         setJackpotsWon(data.jackpotsWon ?? 0);
-        setHighestLevel(data.highestLevel ?? data.level ?? 1);
+        setHighestLevel(
+          data.highestLevel ?? data.level ?? 1
+        );
 
         setCollectedFlags(data.collectedFlags ?? []);
       }
@@ -240,153 +250,4 @@ export default function HomeScreen() {
 
     setBalance((value) => value + bonus);
     setDailyStreak(streak);
-    setLastDailyBonus(now);
-    setMessage(`DAILY BONUS +${bonus}`);
-
-    Vibration.vibrate(150);
-  };
-
-  const claimMission = (type) => {
-    if (
-      type === "spin" &&
-      missionSpins >= 20 &&
-      !spinMissionClaimed
-    ) {
-      setBalance((value) => value + 500);
-      setSpinMissionClaimed(true);
-      setMessage("MISSION +500");
-    }
-
-    if (
-      type === "win" &&
-      missionWins >= 5 &&
-      !winMissionClaimed
-    ) {
-      setBalance((value) => value + 750);
-      setWinMissionClaimed(true);
-      setMessage("MISSION +750");
-    }
-  };
-
-  const buyCredits = (amount) => {
-    setBalance((value) => value + amount);
-    setMessage(`TEST SHOP +${amount}`);
-  };
-
-  const activateVip = () => {
-    if (vip) return;
-
-    setVip(true);
-    setBalance((value) => value + 10000);
-    setMessage("👑 VIP ACTIVATED");
-  };
-
-  const animateReels = (callback) => {
-    reelAnimations.forEach((animation) =>
-      animation.setValue(0)
-    );
-
-    Animated.parallel(
-      reelAnimations.map((animation, index) =>
-        Animated.sequence([
-          Animated.delay(index * 130),
-
-          Animated.timing(animation, {
-            toValue: 1,
-            duration: 220,
-            useNativeDriver: true,
-          }),
-
-          Animated.timing(animation, {
-            toValue: -1,
-            duration: 220,
-            useNativeDriver: true,
-          }),
-
-          Animated.timing(animation, {
-            toValue: 0,
-            duration: 220,
-            useNativeDriver: true,
-          }),
-        ])
-      )
-    ).start(callback);
-  };
-
-  const spin = () => {
-    if (spinning || modal || !loaded) return;
-
-    if (freeSpins <= 0 && balance < bet) {
-      setMessage("NOT ENOUGH CREDITS");
-      setAutoSpin(false);
-      return;
-    }
-
-    setSpinning(true);
-    setWinningIndexes([]);
-    setDisplayWin(0);
-    setMessage("SPINNING...");
-
-    setTotalSpins((value) => value + 1);
-
-    const usingFreeSpin =
-      freeSpins > 0;
-
-    let newBalance = balance;
-    let newJackpot = jackpot;
-
-    if (usingFreeSpin) {
-      setFreeSpins((value) =>
-        Math.max(0, value - 1)
-      );
-    } else {
-      newBalance -= bet;
-
-      newJackpot += Math.max(
-        1,
-        Math.floor(bet * 0.05)
-      );
-
-      addXp(vip ? 15 : 10);
-
-      setMissionSpins((value) =>
-        Math.min(20, value + 1)
-      );
-    }
-
-    animateReels(() => {
-      const nextReels =
-        createReels();
-
-      const result =
-        checkWins(
-          nextReels,
-          bet
-        );
-
-      if (result.totalWin > 0) {
-        const wonFlags =
-          result.winningIndexes
-            .map(
-              (index) =>
-                nextReels[index]
-            )
-            .filter(
-              (symbol) =>
-                flags.includes(symbol)
-            );
-
-        if (wonFlags.length > 0) {
-          setCollectedFlags(
-            (old) => [
-              ...new Set([
-                ...old,
-                ...wonFlags,
-              ]),
-            ]
-          );
-        }
-      }
-
-      const globes =
-        nextReels.filter(
+    setLast
