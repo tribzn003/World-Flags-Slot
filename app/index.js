@@ -6,6 +6,7 @@ import {
   StyleSheet,
   SafeAreaView,
   Animated,
+  Vibration,
 } from "react-native";
 
 const countryCodes = [
@@ -79,6 +80,7 @@ function createReels() {
     () => randomSymbol()
   );
 
+  // Beta: malo češći dobici radi testiranja
   if (Math.random() < 0.25) {
     const line =
       PAYLINES[
@@ -86,14 +88,13 @@ function createReels() {
       ];
 
     const flag = randomFlag();
-
     const roll = Math.random();
 
     let count = 3;
 
     if (roll > 0.85) {
       count = 5;
-    } else if (roll > 0.6) {
+    } else if (roll > 0.60) {
       count = 4;
     }
 
@@ -101,7 +102,7 @@ function createReels() {
       reels[line[i]] = flag;
     }
 
-    if (Math.random() < 0.3) {
+    if (Math.random() < 0.30) {
       const wildPosition =
         1 + Math.floor(Math.random() * (count - 1));
 
@@ -211,4 +212,82 @@ export default function HomeScreen() {
     useState("WORLD FLAGS SLOT");
 
   const [spinning, setSpinning] =
-    use
+    useState(false);
+
+  const [winningIndexes, setWinningIndexes] =
+    useState([]);
+
+  const [autoSpin, setAutoSpin] =
+    useState(false);
+
+  const reelAnimations = useRef(
+    Array.from(
+      { length: 5 },
+      () => new Animated.Value(0)
+    )
+  ).current;
+
+  const winAnim = useRef(
+    new Animated.Value(1)
+  ).current;
+
+  const runWinAnimation = () => {
+    winAnim.setValue(1);
+
+    Animated.sequence([
+      Animated.timing(winAnim, {
+        toValue: 1.18,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+
+      Animated.timing(winAnim, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+
+      Animated.timing(winAnim, {
+        toValue: 1.18,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+
+      Animated.timing(winAnim, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const runReelAnimations = (callback) => {
+    reelAnimations.forEach((anim) => {
+      anim.setValue(0);
+    });
+
+    const animations =
+      reelAnimations.map(
+        (anim, index) =>
+          Animated.sequence([
+            Animated.delay(index * 170),
+
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+
+            Animated.timing(anim, {
+              toValue: -1,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+
+            Animated
