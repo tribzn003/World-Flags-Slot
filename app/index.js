@@ -53,7 +53,9 @@ export default function HomeScreen() {
   const [totalSpins, setTotalSpins] = useState(0);
   const [totalWins, setTotalWins] = useState(0);
   const [biggestWin, setBiggestWin] = useState(0);
+  const [biggestJackpot, setBiggestJackpot] = useState(0);
   const [jackpotsWon, setJackpotsWon] = useState(0);
+  const [highestLevel, setHighestLevel] = useState(1);
 
   const [collectedFlags, setCollectedFlags] = useState([]);
 
@@ -97,23 +99,17 @@ export default function HomeScreen() {
 
         setMissionSpins(data.missionSpins ?? 0);
         setMissionWins(data.missionWins ?? 0);
-
-        setSpinMissionClaimed(
-          data.spinMissionClaimed ?? false
-        );
-
-        setWinMissionClaimed(
-          data.winMissionClaimed ?? false
-        );
+        setSpinMissionClaimed(data.spinMissionClaimed ?? false);
+        setWinMissionClaimed(data.winMissionClaimed ?? false);
 
         setTotalSpins(data.totalSpins ?? 0);
         setTotalWins(data.totalWins ?? 0);
         setBiggestWin(data.biggestWin ?? 0);
+        setBiggestJackpot(data.biggestJackpot ?? 0);
         setJackpotsWon(data.jackpotsWon ?? 0);
+        setHighestLevel(data.highestLevel ?? data.level ?? 1);
 
-        setCollectedFlags(
-          data.collectedFlags ?? []
-        );
+        setCollectedFlags(data.collectedFlags ?? []);
       }
 
       setLoaded(true);
@@ -140,7 +136,9 @@ export default function HomeScreen() {
       totalSpins,
       totalWins,
       biggestWin,
+      biggestJackpot,
       jackpotsWon,
+      highestLevel,
       collectedFlags,
     });
   }, [
@@ -161,9 +159,17 @@ export default function HomeScreen() {
     totalSpins,
     totalWins,
     biggestWin,
+    biggestJackpot,
     jackpotsWon,
+    highestLevel,
     collectedFlags,
   ]);
+
+  useEffect(() => {
+    if (level > highestLevel) {
+      setHighestLevel(level);
+    }
+  }, [level, highestLevel]);
 
   const pulse = () => {
     winAnim.setValue(1);
@@ -174,7 +180,6 @@ export default function HomeScreen() {
         duration: 150,
         useNativeDriver: true,
       }),
-
       Animated.timing(winAnim, {
         toValue: 1,
         duration: 150,
@@ -236,7 +241,6 @@ export default function HomeScreen() {
     setBalance((value) => value + bonus);
     setDailyStreak(streak);
     setLastDailyBonus(now);
-
     setMessage(`DAILY BONUS +${bonus}`);
 
     Vibration.vibrate(150);
@@ -273,61 +277,46 @@ export default function HomeScreen() {
     if (vip) return;
 
     setVip(true);
-
-    setBalance(
-      (value) => value + 10000
-    );
-
+    setBalance((value) => value + 10000);
     setMessage("👑 VIP ACTIVATED");
   };
 
   const animateReels = (callback) => {
-    reelAnimations.forEach(
-      (animation) =>
-        animation.setValue(0)
+    reelAnimations.forEach((animation) =>
+      animation.setValue(0)
     );
 
     Animated.parallel(
-      reelAnimations.map(
-        (animation, index) =>
-          Animated.sequence([
-            Animated.delay(index * 130),
+      reelAnimations.map((animation, index) =>
+        Animated.sequence([
+          Animated.delay(index * 130),
 
-            Animated.timing(animation, {
-              toValue: 1,
-              duration: 220,
-              useNativeDriver: true,
-            }),
+          Animated.timing(animation, {
+            toValue: 1,
+            duration: 220,
+            useNativeDriver: true,
+          }),
 
-            Animated.timing(animation, {
-              toValue: -1,
-              duration: 220,
-              useNativeDriver: true,
-            }),
+          Animated.timing(animation, {
+            toValue: -1,
+            duration: 220,
+            useNativeDriver: true,
+          }),
 
-            Animated.timing(animation, {
-              toValue: 0,
-              duration: 220,
-              useNativeDriver: true,
-            }),
-          ])
+          Animated.timing(animation, {
+            toValue: 0,
+            duration: 220,
+            useNativeDriver: true,
+          }),
+        ])
       )
     ).start(callback);
   };
 
   const spin = () => {
-    if (
-      spinning ||
-      modal ||
-      !loaded
-    ) {
-      return;
-    }
+    if (spinning || modal || !loaded) return;
 
-    if (
-      freeSpins <= 0 &&
-      balance < bet
-    ) {
+    if (freeSpins <= 0 && balance < bet) {
       setMessage("NOT ENOUGH CREDITS");
       setAutoSpin(false);
       return;
@@ -338,9 +327,7 @@ export default function HomeScreen() {
     setDisplayWin(0);
     setMessage("SPINNING...");
 
-    setTotalSpins(
-      (value) => value + 1
-    );
+    setTotalSpins((value) => value + 1);
 
     const usingFreeSpin =
       freeSpins > 0;
@@ -349,9 +336,8 @@ export default function HomeScreen() {
     let newJackpot = jackpot;
 
     if (usingFreeSpin) {
-      setFreeSpins(
-        (value) =>
-          Math.max(0, value - 1)
+      setFreeSpins((value) =>
+        Math.max(0, value - 1)
       );
     } else {
       newBalance -= bet;
@@ -361,13 +347,10 @@ export default function HomeScreen() {
         Math.floor(bet * 0.05)
       );
 
-      addXp(
-        vip ? 15 : 10
-      );
+      addXp(vip ? 15 : 10);
 
-      setMissionSpins(
-        (value) =>
-          Math.min(20, value + 1)
+      setMissionSpins((value) =>
+        Math.min(20, value + 1)
       );
     }
 
@@ -407,26 +390,3 @@ export default function HomeScreen() {
 
       const globes =
         nextReels.filter(
-          (symbol) =>
-            symbol === GLOBE
-        ).length;
-
-      const diamonds =
-        nextReels.filter(
-          (symbol) =>
-            symbol === JACKPOT
-        ).length;
-
-      let awardedFreeSpins = 0;
-      let jackpotWin = 0;
-
-      if (globes === 3) {
-        awardedFreeSpins = 8;
-      }
-
-      if (globes === 4) {
-        awardedFreeSpins = 12;
-      }
-
-      if (globes >= 5) {
-        awarded
