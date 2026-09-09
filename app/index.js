@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
+  Animated,
 } from "react-native";
 
 // 193 UN MEMBER STATES
@@ -54,7 +55,6 @@ function randomFlag() {
 }
 
 function randomSymbol() {
-  // Globe scatter probability
   if (Math.random() < 0.055) {
     return GLOBE;
   }
@@ -68,8 +68,7 @@ function createReels() {
     () => randomSymbol()
   );
 
-  // Temporary beta win frequency.
-  // This makes testing wins much easier.
+  // Beta test win frequency
   if (Math.random() < 0.22) {
     const row = Math.floor(Math.random() * 3);
     const flag = randomFlag();
@@ -102,47 +101,101 @@ function getRows(reels) {
   ];
 }
 
-function checkLine(row, bet) {
-  const first = row[0];
+function checkWins(reels, bet) {
+  const rows = getRows(reels);
 
-  if (first === GLOBE) {
-    return 0;
-  }
+  let totalWin = 0;
+  const winningIndexes = [];
 
-  let count = 1;
+  rows.forEach((row, rowIndex) => {
+    const first = row[0];
 
-  for (let i = 1; i < row.length; i++) {
-    if (row[i] === first) {
-      count++;
-    } else {
-      break;
+    if (first === GLOBE) {
+      return;
     }
-  }
 
-  if (count >= 3) {
-    return bet * PAYOUTS[count];
-  }
+    let count = 1;
 
-  return 0;
+    for (let i = 1; i < row.length; i++) {
+      if (row[i] === first) {
+        count++;
+      } else {
+        break;
+      }
+    }
+
+    if (count >= 3) {
+      totalWin += bet * PAYOUTS[count];
+
+      const rowStart = rowIndex * 5;
+
+      for (let i = 0; i < count; i++) {
+        winningIndexes.push(rowStart + i);
+      }
+    }
+  });
+
+  return {
+    totalWin,
+    winningIndexes,
+  };
 }
 
 export default function HomeScreen() {
   const [reels, setReels] = useState(createReels());
-
   const [balance, setBalance] = useState(1000);
-
   const [bet, setBet] = useState(10);
-
   const [freeSpins, setFreeSpins] = useState(0);
 
   const [message, setMessage] =
     useState("WORLD FLAGS SLOT");
 
+  const [spinning, setSpinning] = useState(false);
+
+  const [winningIndexes, setWinningIndexes] =
+    useState([]);
+
+  const spinAnim = useRef(
+    new Animated.Value(0)
+  ).current;
+
+  const runSpinAnimation = (callback) => {
+    spinAnim.setValue(0);
+
+    Animated.sequence([
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+
+      Animated.timing(spinAnim, {
+        toValue: -1,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+
+      Animated.timing(spinAnim, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start(callback);
+  };
+
   const spin = () => {
+    if (spinning) {
+      return;
+    }
+
     if (freeSpins <= 0 && balance < bet) {
       setMessage("NOT ENOUGH CREDITS");
       return;
     }
+
+    setSpinning(true);
+    setWinningIndexes([]);
+    setMessage("SPINNING...");
 
     let currentBalance = balance;
 
@@ -156,72 +209,109 @@ export default function HomeScreen() {
       currentBalance -= bet;
     }
 
-    const newReels = createReels();
+    runSpinAnimation(() => {
+      const newReels = createReels();
 
-    setReels(newReels);
+      setReels(newReels);
 
-    const rows = getRows(newReels);
+      const result = checkWins(
+        newReels,
+        bet
+      );
 
-    let totalWin = 0;
+      const globes = newReels.filter(
+        (symbol) => symbol === GLOBE
+      ).length;
 
-    rows.forEach((row) => {
-      totalWin += checkLine(row, bet);
+      let awardedFreeSpins = 0;
+
+      if (globes === 3) {
+        awardedFreeSpins = 8;
+      } else if (globes === 4) {
+        awardedFreeSpins = 12;
+      } else if (globes >= 5) {
+        awardedFreeSpins = 20;
+      }
+
+      if (awardedFreeSpins > 0) {
+        setFreeSpins(
+          (value) =>
+            value + awardedFreeSpins
+        );
+      }
+
+      currentBalance += result.totalWin;
+
+      setBalance(currentBalance);
+
+      setWinningIndexes(
+        result.winningIndexes
+      );
+
+      if (
+        result.totalWin > 0 &&
+        awardedFreeSpins > 0
+      ) {
+        setMessage(
+          `WIN ${result.totalWin} + ${awardedFreeSpins} FREE SPINS!`
+        );
+      } else if (result.totalWin > 0) {
+        setMessage(
+          `WIN ${result.totalWin}!`
+        );
+      } else if (awardedFreeSpins > 0) {
+        setMessage(
+          `${awardedFreeSpins} FREE SPINS!`
+        );
+      } else if (usingFreeSpin) {
+        setMessage("FREE SPIN");
+      } else {
+        setMessage("GOOD LUCK!");
+      }
+
+      setSpinning(false);
     });
-
-    const globes = newReels.filter(
-      (symbol) => symbol === GLOBE
-    ).length;
-
-    let awardedFreeSpins = 0;
-
-    if (globes === 3) {
-      awardedFreeSpins = 8;
-    } else if (globes === 4) {
-      awardedFreeSpins = 12;
-    } else if (globes >= 5) {
-      awardedFreeSpins = 20;
-    }
-
-    if (awardedFreeSpins > 0) {
-      setFreeSpins(
-        (value) => value + awardedFreeSpins
-      );
-    }
-
-    currentBalance += totalWin;
-
-    setBalance(currentBalance);
-
-    if (
-      totalWin > 0 &&
-      awardedFreeSpins > 0
-    ) {
-      setMessage(
-        `WIN ${totalWin} + ${awardedFreeSpins} FREE SPINS!`
-      );
-    } else if (totalWin > 0) {
-      setMessage(`WIN ${totalWin}!`);
-    } else if (awardedFreeSpins > 0) {
-      setMessage(
-        `${awardedFreeSpins} FREE SPINS!`
-      );
-    } else if (usingFreeSpin) {
-      setMessage("FREE SPIN");
-    } else {
-      setMessage("GOOD LUCK!");
-    }
   };
 
   const decreaseBet = () => {
+    if (spinning) {
+      return;
+    }
+
     setBet((value) =>
       Math.max(5, value - 5)
     );
   };
 
   const increaseBet = () => {
+    if (spinning) {
+      return;
+    }
+
     setBet((value) =>
       Math.min(100, value + 5)
     );
+  };
+
+  const animatedStyle = {
+    transform: [
+      {
+        translateY: spinAnim.interpolate({
+          inputRange: [-1, 0, 1],
+          outputRange: [-20, 0, 20],
+        }),
+      },
+      {
+        scale: spinAnim.interpolate({
+          inputRange: [-1, 0, 1],
+          outputRange: [0.96, 1, 0.96],
+        }),
+      },
+    ],
+    opacity: spinAnim.interpolate({
+      inputRange: [-1, 0, 1],
+      outputRange: [0.55, 1, 0.55],
+    }),
   };
 
   return (
@@ -269,24 +359,36 @@ export default function HomeScreen() {
 
       </View>
 
-      <View style={styles.slot}>
+      <Animated.View
+        style={[
+          styles.slot,
+          animatedStyle,
+        ]}
+      >
 
-        {reels.map((symbol, index) => (
+        {reels.map((symbol, index) => {
+          const isWinner =
+            winningIndexes.includes(index);
 
-          <View
-            key={index}
-            style={styles.cell}
-          >
+          return (
+            <View
+              key={index}
+              style={[
+                styles.cell,
+                isWinner &&
+                  styles.winningCell,
+              ]}
+            >
 
-            <Text style={styles.symbol}>
-              {symbol}
-            </Text>
+              <Text style={styles.symbol}>
+                {symbol}
+              </Text>
 
-          </View>
+            </View>
+          );
+        })}
 
-        ))}
-
-      </View>
+      </Animated.View>
 
       <Text style={styles.message}>
         {message}
@@ -295,200 +397,4 @@ export default function HomeScreen() {
       <View style={styles.paytable}>
 
         <Text style={styles.payText}>
-          3 FLAGS = ×3
-        </Text>
-
-        <Text style={styles.payText}>
-          4 FLAGS = ×8
-        </Text>
-
-        <Text style={styles.payText}>
-          5 FLAGS = ×20
-        </Text>
-
-      </View>
-
-      <Text style={styles.scatterText}>
-        🌐 3 = 8 FREE • 4 = 12 FREE • 5+ = 20 FREE
-      </Text>
-
-      <View style={styles.betRow}>
-
-        <TouchableOpacity
-          style={styles.smallButton}
-          onPress={decreaseBet}
-        >
-
-          <Text style={styles.buttonText}>
-            BET -
-          </Text>
-
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.smallButton}
-          onPress={increaseBet}
-        >
-
-          <Text style={styles.buttonText}>
-            BET +
-          </Text>
-
-        </TouchableOpacity>
-
-      </View>
-
-      <TouchableOpacity
-        style={styles.spinButton}
-        onPress={spin}
-      >
-
-        <Text style={styles.spinText}>
-          SPIN
-        </Text>
-
-      </TouchableOpacity>
-
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-
-  container: {
-    flex: 1,
-    backgroundColor: "#07111f",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 14,
-  },
-
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#ffffff",
-    textAlign: "center",
-  },
-
-  subtitle: {
-    color: "#8fa8c5",
-    fontSize: 12,
-    marginTop: 4,
-    marginBottom: 15,
-  },
-
-  info: {
-    width: "100%",
-    maxWidth: 420,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 14,
-  },
-
-  infoBox: {
-    width: "31%",
-    backgroundColor: "#14243a",
-    paddingVertical: 9,
-    borderRadius: 9,
-    alignItems: "center",
-  },
-
-  infoLabel: {
-    color: "#8fa8c5",
-    fontSize: 10,
-  },
-
-  infoValue: {
-    color: "#ffffff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-
-  slot: {
-    width: "100%",
-    maxWidth: 420,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    backgroundColor: "#14243a",
-    borderRadius: 16,
-    padding: 7,
-  },
-
-  cell: {
-    width: "20%",
-    height: 82,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#14243a",
-    borderRadius: 9,
-    backgroundColor: "#ffffff",
-  },
-
-  symbol: {
-    fontSize: 40,
-  },
-
-  message: {
-    minHeight: 28,
-    color: "#ffd54a",
-    fontSize: 20,
-    fontWeight: "bold",
-    marginTop: 16,
-    marginBottom: 10,
-    textAlign: "center",
-  },
-
-  paytable: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 7,
-  },
-
-  payText: {
-    color: "#d4deea",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-
-  scatterText: {
-    color: "#8fa8c5",
-    fontSize: 11,
-    marginBottom: 16,
-    textAlign: "center",
-  },
-
-  betRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-
-  smallButton: {
-    backgroundColor: "#253e5e",
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-    borderRadius: 10,
-  },
-
-  buttonText: {
-    color: "#ffffff",
-    fontWeight: "bold",
-  },
-
-  spinButton: {
-    marginTop: 17,
-    backgroundColor: "#e7b51c",
-    width: 190,
-    paddingVertical: 17,
-    alignItems: "center",
-    borderRadius: 40,
-  },
-
-  spinText: {
-    fontSize: 25,
-    fontWeight: "bold",
-    color: "#07111f",
-  },
-
-});
+         
