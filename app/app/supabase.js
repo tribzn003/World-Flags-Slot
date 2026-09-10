@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL =
-  "https://yqinqnylowvneaktxjlh.supabase.co";
+  "https://tboxehpanbcnlskodkua.supabase.co";
 
 const SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_Ed2yEcoHwj-QUeBN5XI39Q_WtbsvP7C";
@@ -99,15 +99,11 @@ export async function updateOnlineStats({
       throw error;
     }
 
-    return {
-      error: null,
-    };
+    return { error: null };
   } catch (error) {
     console.log("ONLINE SAVE ERROR:", error);
 
-    return {
-      error,
-    };
+    return { error };
   }
 }
 
