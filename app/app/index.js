@@ -1,14 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  SafeAreaView,
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
-  Animated,
   Vibration,
-  Modal,
-  ScrollView,
 } from "react-native";
 
 import {
@@ -17,73 +14,26 @@ import {
   GLOBE,
   WILD,
   JACKPOT,
-  PREMIUM_CODES,
-  MID_CODES,
-  flagEmoji,
-  flags,
-} from "../gameData";
+} from "./gameData";
 
 import {
   loadGameData,
   saveGameData,
-} from "../storage";
-
-const DAY = 86400000;
+} from "./storage";
 
 export default function HomeScreen() {
   const [reels, setReels] = useState(createReels());
-
   const [balance, setBalance] = useState(1000);
   const [bet, setBet] = useState(10);
   const [freeSpins, setFreeSpins] = useState(0);
   const [jackpot, setJackpot] = useState(5000);
-
-  const [level, setLevel] = useState(1);
-  const [xp, setXp] = useState(0);
-  const [vip, setVip] = useState(false);
-
-  const [lastDailyBonus, setLastDailyBonus] = useState(0);
-  const [dailyStreak, setDailyStreak] = useState(0);
-
-  const [missionSpins, setMissionSpins] = useState(0);
-  const [missionWins, setMissionWins] = useState(0);
-  const [spinMissionClaimed, setSpinMissionClaimed] =
-    useState(false);
-  const [winMissionClaimed, setWinMissionClaimed] =
-    useState(false);
-
-  const [totalSpins, setTotalSpins] = useState(0);
-  const [totalWins, setTotalWins] = useState(0);
-  const [biggestWin, setBiggestWin] = useState(0);
-  const [biggestJackpot, setBiggestJackpot] = useState(0);
-  const [jackpotsWon, setJackpotsWon] = useState(0);
-  const [highestLevel, setHighestLevel] = useState(1);
-
-  const [collectedFlags, setCollectedFlags] = useState([]);
-
-  const [message, setMessage] = useState("WORLD FLAGS SLOT");
+  const [win, setWin] = useState(0);
+  const [message, setMessage] = useState("GOOD LUCK!");
   const [spinning, setSpinning] = useState(false);
-  const [autoSpin, setAutoSpin] = useState(false);
-  const [winningIndexes, setWinningIndexes] = useState([]);
-  const [displayWin, setDisplayWin] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
-  const [modal, setModal] = useState(null);
-  const [bigWinTitle, setBigWinTitle] = useState("");
-  const [bigWinAmount, setBigWinAmount] = useState(0);
-
-  const reelAnimations = useRef(
-    Array.from({ length: 5 }, () => new Animated.Value(0))
-  ).current;
-
-  const winAnim = useRef(new Animated.Value(1)).current;
-  const bigWinAnim = useRef(new Animated.Value(0)).current;
-
-  const dailyBonusReady =
-    Date.now() - lastDailyBonus >= DAY;
-
   useEffect(() => {
-    (async () => {
+    async function load() {
       const data = await loadGameData();
 
       if (data) {
@@ -91,39 +41,12 @@ export default function HomeScreen() {
         setBet(data.bet ?? 10);
         setFreeSpins(data.freeSpins ?? 0);
         setJackpot(data.jackpot ?? 5000);
-
-        setLevel(data.level ?? 1);
-        setXp(data.xp ?? 0);
-        setVip(data.vip ?? false);
-
-        setLastDailyBonus(data.lastDailyBonus ?? 0);
-        setDailyStreak(data.dailyStreak ?? 0);
-
-        setMissionSpins(data.missionSpins ?? 0);
-        setMissionWins(data.missionWins ?? 0);
-
-        setSpinMissionClaimed(
-          data.spinMissionClaimed ?? false
-        );
-
-        setWinMissionClaimed(
-          data.winMissionClaimed ?? false
-        );
-
-        setTotalSpins(data.totalSpins ?? 0);
-        setTotalWins(data.totalWins ?? 0);
-        setBiggestWin(data.biggestWin ?? 0);
-        setBiggestJackpot(data.biggestJackpot ?? 0);
-        setJackpotsWon(data.jackpotsWon ?? 0);
-        setHighestLevel(
-          data.highestLevel ?? data.level ?? 1
-        );
-
-        setCollectedFlags(data.collectedFlags ?? []);
       }
 
       setLoaded(true);
-    })();
+    }
+
+    load();
   }, []);
 
   useEffect(() => {
@@ -134,22 +57,6 @@ export default function HomeScreen() {
       bet,
       freeSpins,
       jackpot,
-      level,
-      xp,
-      vip,
-      lastDailyBonus,
-      dailyStreak,
-      missionSpins,
-      missionWins,
-      spinMissionClaimed,
-      winMissionClaimed,
-      totalSpins,
-      totalWins,
-      biggestWin,
-      biggestJackpot,
-      jackpotsWon,
-      highestLevel,
-      collectedFlags,
     });
   }, [
     loaded,
@@ -157,97 +64,410 @@ export default function HomeScreen() {
     bet,
     freeSpins,
     jackpot,
-    level,
-    xp,
-    vip,
-    lastDailyBonus,
-    dailyStreak,
-    missionSpins,
-    missionWins,
-    spinMissionClaimed,
-    winMissionClaimed,
-    totalSpins,
-    totalWins,
-    biggestWin,
-    biggestJackpot,
-    jackpotsWon,
-    highestLevel,
-    collectedFlags,
   ]);
 
-  useEffect(() => {
-    if (level > highestLevel) {
-      setHighestLevel(level);
-    }
-  }, [level, highestLevel]);
+  const spin = () => {
+    if (spinning || !loaded) return;
 
-  const pulse = () => {
-    winAnim.setValue(1);
+    const usingFreeSpin = freeSpins > 0;
 
-    Animated.sequence([
-      Animated.timing(winAnim, {
-        toValue: 1.18,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(winAnim, {
-        toValue: 1,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  const showBigWin = (title, amount) => {
-    setBigWinTitle(title);
-    setBigWinAmount(amount);
-    setModal("bigwin");
-
-    bigWinAnim.setValue(0);
-
-    Animated.spring(bigWinAnim, {
-      toValue: 1,
-      friction: 5,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const addXp = (amount) => {
-    setXp((old) => {
-      let next = old + amount;
-
-      if (next >= 100) {
-        next -= 100;
-        setLevel((value) => value + 1);
-      }
-
-      return next;
-    });
-  };
-
-  const claimDailyBonus = () => {
-    if (!dailyBonusReady) {
-      setMessage("DAILY BONUS AVAILABLE LATER");
+    if (!usingFreeSpin && balance < bet) {
+      setMessage("NOT ENOUGH CREDITS");
       return;
     }
 
-    const now = Date.now();
+    setSpinning(true);
+    setWin(0);
+    setMessage("SPINNING...");
 
-    const streak =
-      lastDailyBonus &&
-      now - lastDailyBonus < DAY * 2
-        ? Math.min(dailyStreak + 1, 7)
-        : 1;
+    let nextBalance = balance;
+    let nextJackpot = jackpot;
 
-    let bonus =
-      250 +
-      level * 50 +
-      streak * 50;
+    if (usingFreeSpin) {
+      setFreeSpins((value) =>
+        Math.max(0, value - 1)
+      );
+    } else {
+      nextBalance -= bet;
 
-    if (vip) {
-      bonus *= 2;
+      nextJackpot += Math.max(
+        1,
+        Math.floor(bet * 0.05)
+      );
     }
 
-    setBalance((value) => value + bonus);
-    setDailyStreak(streak);
-    setLast
+    setTimeout(() => {
+      const nextReels = createReels();
+      const result = checkWins(nextReels, bet);
+
+      const globes = nextReels.filter(
+        (symbol) => symbol === GLOBE
+      ).length;
+
+      const diamonds = nextReels.filter(
+        (symbol) => symbol === JACKPOT
+      ).length;
+
+      let freeAward = 0;
+      let jackpotWin = 0;
+
+      if (globes === 3) {
+        freeAward = 8;
+      } else if (globes === 4) {
+        freeAward = 12;
+      } else if (globes >= 5) {
+        freeAward = 20;
+      }
+
+      if (freeAward > 0) {
+        setFreeSpins((value) =>
+          value + freeAward
+        );
+      }
+
+      if (diamonds >= 3) {
+        jackpotWin = nextJackpot;
+        nextJackpot = 5000;
+      }
+
+      const totalWin =
+        result.totalWin + jackpotWin;
+
+      nextBalance += totalWin;
+
+      setReels(nextReels);
+      setBalance(nextBalance);
+      setJackpot(nextJackpot);
+      setWin(totalWin);
+
+      if (jackpotWin > 0) {
+        setMessage(
+          `💎 JACKPOT ${jackpotWin}`
+        );
+
+        Vibration.vibrate(300);
+      } else if (totalWin > 0) {
+        setMessage(
+          `🏆 WIN ${totalWin}`
+        );
+
+        Vibration.vibrate(150);
+      } else if (freeAward > 0) {
+        setMessage(
+          `🌐 ${freeAward} FREE SPINS`
+        );
+      } else if (usingFreeSpin) {
+        setMessage("FREE SPIN");
+      } else {
+        setMessage("GOOD LUCK!");
+      }
+
+      setSpinning(false);
+    }, 700);
+  };
+
+  const decreaseBet = () => {
+    if (spinning) return;
+
+    setBet((value) =>
+      Math.max(5, value - 5)
+    );
+  };
+
+  const increaseBet = () => {
+    if (spinning) return;
+
+    setBet((value) =>
+      Math.min(100, value + 5)
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.title}>
+        🌍 WORLD FLAGS SLOT 🌍
+      </Text>
+
+      <Text style={styles.subtitle}>
+        193 UN MEMBER STATES
+      </Text>
+
+      <View style={styles.jackpotBox}>
+        <Text style={styles.jackpotTitle}>
+          💎 JACKPOT
+        </Text>
+
+        <Text style={styles.jackpotValue}>
+          {jackpot}
+        </Text>
+      </View>
+
+      <View style={styles.stats}>
+        <Stat
+          title="BALANCE"
+          value={balance}
+        />
+
+        <Stat
+          title="BET"
+          value={bet}
+        />
+
+        <Stat
+          title="WIN"
+          value={win}
+        />
+      </View>
+
+      <View style={styles.slot}>
+        {reels.map((symbol, index) => (
+          <View
+            key={index}
+            style={styles.cell}
+          >
+            <Text style={styles.symbol}>
+              {symbol}
+            </Text>
+
+            {symbol === WILD && (
+              <Text style={styles.label}>
+                WILD
+              </Text>
+            )}
+
+            {symbol === GLOBE && (
+              <Text style={styles.label}>
+                SCATTER
+              </Text>
+            )}
+
+            {symbol === JACKPOT && (
+              <Text style={styles.label}>
+                JACKPOT
+              </Text>
+            )}
+          </View>
+        ))}
+      </View>
+
+      <Text style={styles.message}>
+        {loaded
+          ? message
+          : "LOADING..."}
+      </Text>
+
+      <Text style={styles.free}>
+        FREE SPINS: {freeSpins}
+      </Text>
+
+      <View style={styles.betRow}>
+        <TouchableOpacity
+          style={styles.smallButton}
+          onPress={decreaseBet}
+        >
+          <Text style={styles.buttonText}>
+            BET -
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.smallButton}
+          onPress={increaseBet}
+        >
+          <Text style={styles.buttonText}>
+            BET +
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.smallButton}
+          onPress={() => setBet(100)}
+        >
+          <Text style={styles.buttonText}>
+            MAX
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity
+        style={[
+          styles.spinButton,
+          spinning && styles.disabled,
+        ]}
+        onPress={spin}
+        disabled={spinning}
+      >
+        <Text style={styles.spinText}>
+          {spinning
+            ? "SPINNING..."
+            : "SPIN"}
+        </Text>
+      </TouchableOpacity>
+    </SafeAreaView>
+  );
+}
+
+function Stat({ title, value }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statTitle}>
+        {title}
+      </Text>
+
+      <Text style={styles.statValue}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#07111f",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 10,
+  },
+
+  title: {
+    color: "white",
+    fontSize: 22,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+
+  subtitle: {
+    color: "#8fa8c5",
+    fontSize: 11,
+    marginBottom: 12,
+  },
+
+  jackpotBox: {
+    backgroundColor: "#241b07",
+    borderColor: "#e7b51c",
+    borderWidth: 2,
+    borderRadius: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 40,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+
+  jackpotTitle: {
+    color: "#ffd54a",
+    fontWeight: "bold",
+  },
+
+  jackpotValue: {
+    color: "white",
+    fontSize: 22,
+    fontWeight: "bold",
+  },
+
+  stats: {
+    width: "100%",
+    maxWidth: 420,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+
+  stat: {
+    width: "31%",
+    backgroundColor: "#14243a",
+    padding: 8,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+
+  statTitle: {
+    color: "#8fa8c5",
+    fontSize: 10,
+  },
+
+  statValue: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+
+  slot: {
+    width: "100%",
+    maxWidth: 420,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    backgroundColor: "#14243a",
+    padding: 5,
+    borderRadius: 12,
+  },
+
+  cell: {
+    width: "20%",
+    height: 75,
+    backgroundColor: "white",
+    borderColor: "#14243a",
+    borderWidth: 2,
+    borderRadius: 7,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  symbol: {
+    fontSize: 34,
+  },
+
+  label: {
+    fontSize: 7,
+    fontWeight: "bold",
+  },
+
+  message: {
+    color: "#ffd54a",
+    fontSize: 17,
+    fontWeight: "bold",
+    marginTop: 10,
+    minHeight: 25,
+  },
+
+  free: {
+    color: "#7fd6e4",
+    marginBottom: 10,
+  },
+
+  betRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 14,
+  },
+
+  smallButton: {
+    backgroundColor: "#253e5e",
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+  },
+
+  buttonText: {
+    color: "white",
+    fontWeight: "bold",
+  },
+
+  spinButton: {
+    backgroundColor: "#e7b51c",
+    width: 180,
+    paddingVertical: 15,
+    borderRadius: 30,
+    alignItems: "center",
+  },
+
+  disabled: {
+    opacity: 0.5,
+  },
+
+  spinText: {
+    color: "#07111f",
+    fontSize: 22,
+    fontWeight: "bold",
+  },
+});
