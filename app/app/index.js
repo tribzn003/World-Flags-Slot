@@ -96,6 +96,8 @@ export default function HomeScreen() {
   const [modal, setModal] = useState(null);
   const [bigWinText, setBigWinText] = useState(null);
 
+  const [winningIndexes, setWinningIndexes] = useState([]);
+
   const spinPlayer = useAudioPlayer(SPIN_SOUND, {
     downloadFirst: true,
   });
@@ -120,6 +122,8 @@ export default function HomeScreen() {
     new Animated.Value(0),
   ]).current;
 
+  const winPulse = useRef(new Animated.Value(0)).current;
+
   const timers = useRef([]);
 
   const playSound = async (player) => {
@@ -140,6 +144,48 @@ export default function HomeScreen() {
     } catch (error) {
       console.log("SPIN SOUND STOP ERROR:", error);
     }
+  };
+
+  const animateWin = () => {
+    winPulse.setValue(0);
+
+    Animated.sequence([
+      Animated.timing(winPulse, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+
+      Animated.timing(winPulse, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+
+      Animated.timing(winPulse, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+
+      Animated.timing(winPulse, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+
+      Animated.timing(winPulse, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+
+      Animated.timing(winPulse, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   useEffect(() => {
@@ -415,11 +461,11 @@ export default function HomeScreen() {
 
   const collectWinningFlags = (
     finalReels,
-    winningIndexes
+    winningIndexesList
   ) => {
     const newFlags = [];
 
-    winningIndexes.forEach((index) => {
+    winningIndexesList.forEach((index) => {
       const symbol = finalReels[index];
 
       if (
@@ -459,6 +505,7 @@ export default function HomeScreen() {
 
     setSpinning(true);
     setWin(0);
+    setWinningIndexes([]);
 
     setMessage(
       usingFreeSpin
@@ -544,6 +591,46 @@ export default function HomeScreen() {
         setBalance(nextBalance);
         setJackpot(nextJackpot);
         setWin(totalWin);
+
+        let highlightIndexes = [
+          ...result.winningIndexes,
+        ];
+
+        if (jackpotWin > 0) {
+          finalReels.forEach(
+            (symbol, index) => {
+              if (
+                symbol === JACKPOT &&
+                !highlightIndexes.includes(index)
+              ) {
+                highlightIndexes.push(index);
+              }
+            }
+          );
+        }
+
+        if (
+          freeAward > 0 &&
+          highlightIndexes.length === 0
+        ) {
+          finalReels.forEach(
+            (symbol, index) => {
+              if (
+                symbol === GLOBE
+              ) {
+                highlightIndexes.push(index);
+              }
+            }
+          );
+        }
+
+        if (highlightIndexes.length > 0) {
+          setWinningIndexes(
+            highlightIndexes
+          );
+
+          animateWin();
+        }
 
         if (!usingFreeSpin) {
           addXp();
@@ -867,15 +954,13 @@ export default function HomeScreen() {
       title:
         "WORLD TRAVELER",
       unlocked:
-        collectedFlags.length >=
-        50,
+        collectedFlags.length >= 50,
     },
     {
       title:
         "MASTER COLLECTOR",
       unlocked:
-        collectedFlags.length >=
-        193,
+        collectedFlags.length >= 193,
     },
   ];
 
@@ -886,6 +971,12 @@ export default function HomeScreen() {
     displayReels[5 + column],
     displayReels[10 + column],
   ];
+
+  const winScale =
+    winPulse.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 1.12],
+    });
 
   return (
     <SafeAreaView
@@ -923,8 +1014,7 @@ export default function HomeScreen() {
           <Text
             style={styles.xp}
           >
-            XP {xp}/
-            {XP_PER_LEVEL}
+            XP {xp}/{XP_PER_LEVEL}
           </Text>
 
           {vip && (
@@ -1045,55 +1135,80 @@ export default function HomeScreen() {
                     (
                       symbol,
                       row
-                    ) => (
-                      <View
-                        key={row}
-                        style={
-                          styles.cell
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.symbol
-                          }
+                    ) => {
+                      const index =
+                        row * 5 +
+                        column;
+
+                      const isWinner =
+                        winningIndexes.includes(
+                          index
+                        );
+
+                      return (
+                        <Animated.View
+                          key={row}
+                          style={[
+                            styles.cell,
+                            isWinner &&
+                              styles.winningCell,
+                            {
+                              transform: [
+                                {
+                                  scale:
+                                    isWinner
+                                      ? winScale
+                                      : 1,
+                                },
+                              ],
+                            },
+                          ]}
                         >
-                          {symbol}
-                        </Text>
-
-                        {symbol ===
-                          WILD && (
                           <Text
-                            style={
-                              styles.label
-                            }
+                            style={[
+                              styles.symbol,
+                              isWinner &&
+                                styles.winningSymbol,
+                            ]}
                           >
-                            WILD
+                            {symbol}
                           </Text>
-                        )}
 
-                        {symbol ===
-                          GLOBE && (
-                          <Text
-                            style={
-                              styles.label
-                            }
-                          >
-                            SCATTER
-                          </Text>
-                        )}
+                          {symbol ===
+                            WILD && (
+                            <Text
+                              style={
+                                styles.label
+                              }
+                            >
+                              WILD
+                            </Text>
+                          )}
 
-                        {symbol ===
-                          JACKPOT && (
-                          <Text
-                            style={
-                              styles.label
-                            }
-                          >
-                            JACKPOT
-                          </Text>
-                        )}
-                      </View>
-                    )
+                          {symbol ===
+                            GLOBE && (
+                            <Text
+                              style={
+                                styles.label
+                              }
+                            >
+                              SCATTER
+                            </Text>
+                          )}
+
+                          {symbol ===
+                            JACKPOT && (
+                            <Text
+                              style={
+                                styles.label
+                              }
+                            >
+                              JACKPOT
+                            </Text>
+                          )}
+                        </Animated.View>
+                      );
+                    }
                   )}
                 </Animated.View>
               );
@@ -1112,8 +1227,7 @@ export default function HomeScreen() {
         <Text
           style={styles.free}
         >
-          FREE SPINS:{" "}
-          {freeSpins}
+          FREE SPINS: {freeSpins}
         </Text>
 
         <View
@@ -1172,8 +1286,7 @@ export default function HomeScreen() {
             ]}
             onPress={() =>
               setAutoSpin(
-                (value) =>
-                  !value
+                (value) => !value
               )
             }
           >
@@ -1218,18 +1331,14 @@ export default function HomeScreen() {
             text="💰 PAYTABLE"
             onPress={() => {
               setAutoSpin(false);
-              setModal(
-                "paytable"
-              );
+              setModal("paytable");
             }}
           />
 
           <MenuButton
             text="🎯 MISSIONS"
             onPress={() =>
-              setModal(
-                "missions"
-              )
+              setModal("missions")
             }
           />
 
@@ -1243,18 +1352,14 @@ export default function HomeScreen() {
           <MenuButton
             text="👤 PROFILE"
             onPress={() =>
-              setModal(
-                "profile"
-              )
+              setModal("profile")
             }
           />
 
           <MenuButton
             text="🌍 COLLECTION"
             onPress={() =>
-              setModal(
-                "collection"
-              )
+              setModal("collection")
             }
           />
 
@@ -1268,9 +1373,7 @@ export default function HomeScreen() {
           <MenuButton
             text="🏅 ACHIEVEMENTS"
             onPress={() =>
-              setModal(
-                "achievements"
-              )
+              setModal("achievements")
             }
           />
 
@@ -1287,8 +1390,7 @@ export default function HomeScreen() {
             styles.testNotice
           }
         >
-          TEST VERSION — VIRTUAL
-          CREDITS ONLY
+          TEST VERSION — VIRTUAL CREDITS ONLY
         </Text>
       </ScrollView>
 
@@ -1298,8 +1400,7 @@ export default function HomeScreen() {
           setModal(null)
         }
       >
-        {modal ===
-          "paytable" && (
+        {modal === "paytable" && (
           <>
             <ModalTitle text="💰 PAYTABLE" />
 
@@ -1340,8 +1441,7 @@ export default function HomeScreen() {
           </>
         )}
 
-        {modal ===
-          "missions" && (
+        {modal === "missions" && (
           <>
             <ModalTitle text="🎯 MISSIONS" />
 
@@ -1354,8 +1454,7 @@ export default function HomeScreen() {
 
               <ClaimButton
                 disabled={
-                  missionSpins <
-                    20 ||
+                  missionSpins < 20 ||
                   spinMissionClaimed
                 }
                 text={
@@ -1378,8 +1477,7 @@ export default function HomeScreen() {
 
               <ClaimButton
                 disabled={
-                  missionWins <
-                    5 ||
+                  missionWins < 5 ||
                   winMissionClaimed
                 }
                 text={
@@ -1408,8 +1506,7 @@ export default function HomeScreen() {
                 text={`Reward today: ${
                   (250 +
                     level * 50 +
-                    dailyStreak *
-                      50) *
+                    dailyStreak * 50) *
                   (vip ? 2 : 1)
                 } credits`}
               />
@@ -1428,8 +1525,7 @@ export default function HomeScreen() {
           </>
         )}
 
-        {modal ===
-          "profile" && (
+        {modal === "profile" && (
           <>
             <ModalTitle text="👤 PROFILE" />
 
@@ -1481,8 +1577,7 @@ export default function HomeScreen() {
           </>
         )}
 
-        {modal ===
-          "collection" && (
+        {modal === "collection" && (
           <>
             <ModalTitle
               text={`🌍 FLAG COLLECTION ${collectedFlags.length}/193`}
@@ -1505,9 +1600,7 @@ export default function HomeScreen() {
 
                   return (
                     <View
-                      key={
-                        index
-                      }
+                      key={index}
                       style={
                         styles.flagCell
                       }
@@ -1563,8 +1656,7 @@ export default function HomeScreen() {
           </>
         )}
 
-        {modal ===
-          "achievements" && (
+        {modal === "achievements" && (
           <>
             <ModalTitle text="🏅 ACHIEVEMENTS" />
 
@@ -1597,8 +1689,7 @@ export default function HomeScreen() {
                 styles.warning
               }
             >
-              NO REAL MONEY — TEST
-              CREDITS ONLY
+              NO REAL MONEY — TEST CREDITS ONLY
             </Text>
 
             <ShopButton
@@ -1668,13 +1759,35 @@ export default function HomeScreen() {
             setBigWinText(null)
           }
         >
-          <Text
+          <View
             style={
-              styles.bigWinText
+              styles.bigWinBox
             }
           >
-            {bigWinText}
-          </Text>
+            <Text
+              style={
+                styles.bigWinStars
+              }
+            >
+              ✨ ⭐ ✨
+            </Text>
+
+            <Text
+              style={
+                styles.bigWinText
+              }
+            >
+              {bigWinText}
+            </Text>
+
+            <Text
+              style={
+                styles.bigWinStars
+              }
+            >
+              ✨ ⭐ ✨
+            </Text>
+          </View>
 
           <Text
             style={styles.tapText}
@@ -2052,8 +2165,22 @@ const styles =
         "center",
     },
 
+    winningCell: {
+      backgroundColor:
+        "#fff3b0",
+      borderColor:
+        "#ffd000",
+      borderWidth: 4,
+      zIndex: 20,
+      elevation: 10,
+    },
+
     symbol: {
       fontSize: 34,
+    },
+
+    winningSymbol: {
+      fontSize: 39,
     },
 
     label: {
@@ -2285,10 +2412,27 @@ const styles =
     bigWinOverlay: {
       flex: 1,
       backgroundColor:
-        "rgba(0,0,0,0.92)",
+        "rgba(0,0,0,0.94)",
       alignItems: "center",
       justifyContent:
         "center",
+    },
+
+    bigWinBox: {
+      borderWidth: 3,
+      borderColor:
+        "#ffd54a",
+      borderRadius: 25,
+      paddingVertical: 30,
+      paddingHorizontal: 28,
+      backgroundColor:
+        "#241b07",
+      alignItems: "center",
+    },
+
+    bigWinStars: {
+      fontSize: 28,
+      marginVertical: 8,
     },
 
     bigWinText: {
