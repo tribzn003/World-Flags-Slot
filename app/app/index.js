@@ -10,6 +10,8 @@ import {
   Animated,
   Modal,
   ScrollView,
+  TextInput,
+  ActivityIndicator,
 } from "react-native";
 
 import { useAudioPlayer } from "expo-audio";
@@ -28,6 +30,12 @@ import {
   loadGameData,
   saveGameData,
 } from "./storage";
+
+import {
+  ensurePlayerSession,
+  updateOnlineStats,
+  getOnlineLeaderboard,
+} from "./supabase";
 
 const XP_PER_LEVEL = 100;
 
@@ -68,7 +76,6 @@ export default function HomeScreen() {
   const [spinning, setSpinning] = useState(false);
   const [autoSpin, setAutoSpin] = useState(false);
   const [loaded, setLoaded] = useState(false);
-
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   const [level, setLevel] = useState(1);
@@ -92,11 +99,20 @@ export default function HomeScreen() {
     useState(false);
 
   const [collectedFlags, setCollectedFlags] = useState([]);
+  const [winningIndexes, setWinningIndexes] = useState([]);
 
   const [modal, setModal] = useState(null);
   const [bigWinText, setBigWinText] = useState(null);
 
-  const [winningIndexes, setWinningIndexes] = useState([]);
+  const [playerId, setPlayerId] = useState(null);
+  const [playerName, setPlayerName] = useState("PLAYER");
+
+  const [onlineStatus, setOnlineStatus] =
+    useState("CONNECTING");
+
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardLoading, setLeaderboardLoading] =
+    useState(false);
 
   const spinPlayer = useAudioPlayer(SPIN_SOUND, {
     downloadFirst: true,
@@ -122,7 +138,8 @@ export default function HomeScreen() {
     new Animated.Value(0),
   ]).current;
 
-  const winPulse = useRef(new Animated.Value(0)).current;
+  const winPulse =
+    useRef(new Animated.Value(0)).current;
 
   const timers = useRef([]);
 
@@ -142,7 +159,7 @@ export default function HomeScreen() {
       spinPlayer.pause();
       spinPlayer.seekTo(0);
     } catch (error) {
-      console.log("SPIN SOUND STOP ERROR:", error);
+      console.log("SPIN SOUND ERROR:", error);
     }
   };
 
@@ -152,37 +169,32 @@ export default function HomeScreen() {
     Animated.sequence([
       Animated.timing(winPulse, {
         toValue: 1,
-        duration: 220,
+        duration: 200,
         useNativeDriver: true,
       }),
-
       Animated.timing(winPulse, {
         toValue: 0,
-        duration: 220,
+        duration: 200,
         useNativeDriver: true,
       }),
-
       Animated.timing(winPulse, {
         toValue: 1,
-        duration: 220,
+        duration: 200,
         useNativeDriver: true,
       }),
-
       Animated.timing(winPulse, {
         toValue: 0,
-        duration: 220,
+        duration: 200,
         useNativeDriver: true,
       }),
-
       Animated.timing(winPulse, {
         toValue: 1,
-        duration: 220,
+        duration: 200,
         useNativeDriver: true,
       }),
-
       Animated.timing(winPulse, {
         toValue: 0,
-        duration: 220,
+        duration: 200,
         useNativeDriver: true,
       }),
     ]).start();
@@ -197,7 +209,6 @@ export default function HomeScreen() {
         setBet(data.bet ?? 10);
         setFreeSpins(data.freeSpins ?? 0);
         setJackpot(data.jackpot ?? 5000);
-
         setSoundEnabled(data.soundEnabled ?? true);
 
         setLevel(data.level ?? 1);
@@ -227,6 +238,10 @@ export default function HomeScreen() {
 
         setCollectedFlags(
           data.collectedFlags ?? []
+        );
+
+        setPlayerName(
+          data.playerName ?? "PLAYER"
         );
       }
 
@@ -269,6 +284,7 @@ export default function HomeScreen() {
       winMissionClaimed,
 
       collectedFlags,
+      playerName,
     });
   }, [
     loaded,
@@ -289,6 +305,71 @@ export default function HomeScreen() {
     spinMissionClaimed,
     winMissionClaimed,
     collectedFlags,
+    playerName,
+  ]);
+
+  useEffect(() => {
+    if (!loaded) return;
+
+    let active = true;
+
+    async function connectOnline() {
+      setOnlineStatus("CONNECTING");
+
+      const { user, error } =
+        await ensurePlayerSession();
+
+      if (!active) return;
+
+      if (error || !user) {
+        setOnlineStatus("OFFLINE");
+        return;
+      }
+
+      setPlayerId(user.id);
+      setOnlineStatus("ONLINE");
+    }
+
+    connectOnline();
+
+    return () => {
+      active = false;
+    };
+  }, [loaded]);
+
+  useEffect(() => {
+    if (!loaded || !playerId) return;
+
+    const timer = setTimeout(async () => {
+      const { error } =
+        await updateOnlineStats({
+          userId: playerId,
+          playerName,
+          highestLevel,
+          biggestWin: stats.biggestWin,
+          biggestJackpot: stats.biggestJackpot,
+          flagsCollected: collectedFlags.length,
+          totalWins: stats.totalWins,
+          totalSpins: stats.totalSpins,
+        });
+
+      setOnlineStatus(
+        error ? "OFFLINE" : "ONLINE"
+      );
+    }, 1000);
+
+    return () =>
+      clearTimeout(timer);
+  }, [
+    loaded,
+    playerId,
+    playerName,
+    highestLevel,
+    stats.biggestWin,
+    stats.biggestJackpot,
+    stats.totalWins,
+    stats.totalSpins,
+    collectedFlags.length,
   ]);
 
   useEffect(() => {
@@ -303,6 +384,63 @@ export default function HomeScreen() {
       }
     }
   }, [soundEnabled]);
+
+  const refreshLeaderboard = async () => {
+    setLeaderboardLoading(true);
+
+    const { data, error } =
+      await getOnlineLeaderboard();
+
+    if (error) {
+      setOnlineStatus("OFFLINE");
+      setLeaderboard([]);
+    } else {
+      setOnlineStatus("ONLINE");
+      setLeaderboard(data);
+    }
+
+    setLeaderboardLoading(false);
+  };
+
+  const savePlayerName = async () => {
+    if (!playerId) {
+      setOnlineStatus("OFFLINE");
+      return;
+    }
+
+    const cleanName =
+      playerName.trim().slice(0, 20) ||
+      `PLAYER-${playerId.slice(0, 4).toUpperCase()}`;
+
+    setPlayerName(cleanName);
+
+    const { error } =
+      await updateOnlineStats({
+        userId: playerId,
+        playerName: cleanName,
+        highestLevel,
+        biggestWin: stats.biggestWin,
+        biggestJackpot: stats.biggestJackpot,
+        flagsCollected: collectedFlags.length,
+        totalWins: stats.totalWins,
+        totalSpins: stats.totalSpins,
+      });
+
+    if (error) {
+      setOnlineStatus("OFFLINE");
+      setMessage("ONLINE SAVE FAILED");
+    } else {
+      setOnlineStatus("ONLINE");
+      setMessage("PLAYER NAME SAVED");
+      await refreshLeaderboard();
+    }
+  };
+
+  const openRank = async () => {
+    setAutoSpin(false);
+    setModal("rank");
+    await refreshLeaderboard();
+  };
 
   const randomizeColumn = (current, column) => {
     const next = [...current];
@@ -388,11 +526,7 @@ export default function HomeScreen() {
       setDisplayReels((current) => {
         let next = [...current];
 
-        for (
-          let column = 0;
-          column < 5;
-          column++
-        ) {
+        for (let column = 0; column < 5; column++) {
           if (active[column]) {
             next = randomizeColumn(
               next,
@@ -441,12 +575,18 @@ export default function HomeScreen() {
   };
 
   const addXp = () => {
-    const amount = vip ? 15 : 10;
+    const amount =
+      vip ? 15 : 10;
 
-    let newXp = xp + amount;
-    let newLevel = level;
+    let newXp =
+      xp + amount;
 
-    while (newXp >= XP_PER_LEVEL) {
+    let newLevel =
+      level;
+
+    while (
+      newXp >= XP_PER_LEVEL
+    ) {
       newXp -= XP_PER_LEVEL;
       newLevel += 1;
     }
@@ -454,7 +594,9 @@ export default function HomeScreen() {
     setXp(newXp);
     setLevel(newLevel);
 
-    if (newLevel > highestLevel) {
+    if (
+      newLevel > highestLevel
+    ) {
       setHighestLevel(newLevel);
     }
   };
@@ -466,7 +608,8 @@ export default function HomeScreen() {
     const newFlags = [];
 
     winningIndexesList.forEach((index) => {
-      const symbol = finalReels[index];
+      const symbol =
+        finalReels[index];
 
       if (
         flags.includes(symbol) &&
@@ -478,15 +621,19 @@ export default function HomeScreen() {
     });
 
     if (newFlags.length > 0) {
-      setCollectedFlags((current) => [
-        ...current,
-        ...newFlags,
-      ]);
+      setCollectedFlags(
+        (current) => [
+          ...current,
+          ...newFlags,
+        ]
+      );
     }
   };
 
   const spin = () => {
-    if (spinning || !loaded) return;
+    if (spinning || !loaded) {
+      return;
+    }
 
     const usingFreeSpin =
       freeSpins > 0;
@@ -500,6 +647,7 @@ export default function HomeScreen() {
       );
 
       setAutoSpin(false);
+
       return;
     }
 
@@ -515,20 +663,30 @@ export default function HomeScreen() {
 
     playSound(spinPlayer);
 
-    let nextBalance = balance;
-    let nextJackpot = jackpot;
+    let nextBalance =
+      balance;
+
+    let nextJackpot =
+      jackpot;
 
     if (usingFreeSpin) {
-      setFreeSpins((value) =>
-        Math.max(0, value - 1)
+      setFreeSpins(
+        (value) =>
+          Math.max(
+            0,
+            value - 1
+          )
       );
     } else {
       nextBalance -= bet;
 
-      nextJackpot += Math.max(
-        1,
-        Math.floor(bet * 0.05)
-      );
+      nextJackpot +=
+        Math.max(
+          1,
+          Math.floor(
+            bet * 0.05
+          )
+        );
     }
 
     const finalReels =
@@ -538,7 +696,10 @@ export default function HomeScreen() {
       finalReels,
       () => {
         const result =
-          checkWins(finalReels, bet);
+          checkWins(
+            finalReels,
+            bet
+          );
 
         const globes =
           finalReels.filter(
@@ -566,7 +727,8 @@ export default function HomeScreen() {
         if (freeAward > 0) {
           setFreeSpins(
             (value) =>
-              value + freeAward
+              value +
+              freeAward
           );
         }
 
@@ -574,27 +736,26 @@ export default function HomeScreen() {
           jackpotWin =
             nextJackpot;
 
-          nextJackpot = 5000;
+          nextJackpot =
+            5000;
         }
 
         const totalWin =
           result.totalWin +
           jackpotWin;
 
-        nextBalance += totalWin;
+        nextBalance +=
+          totalWin;
 
         setReels(finalReels);
-        setDisplayReels(
-          finalReels
-        );
+        setDisplayReels(finalReels);
 
         setBalance(nextBalance);
         setJackpot(nextJackpot);
         setWin(totalWin);
 
-        let highlightIndexes = [
-          ...result.winningIndexes,
-        ];
+        let highlightIndexes =
+          [...result.winningIndexes];
 
         if (jackpotWin > 0) {
           finalReels.forEach(
@@ -615,9 +776,7 @@ export default function HomeScreen() {
         ) {
           finalReels.forEach(
             (symbol, index) => {
-              if (
-                symbol === GLOBE
-              ) {
+              if (symbol === GLOBE) {
                 highlightIndexes.push(index);
               }
             }
@@ -646,10 +805,8 @@ export default function HomeScreen() {
           setStats(
             (current) => ({
               ...current,
-
               totalSpins:
-                current.totalSpins +
-                1,
+                current.totalSpins + 1,
             })
           );
         }
@@ -668,8 +825,7 @@ export default function HomeScreen() {
               ...current,
 
               totalWins:
-                current.totalWins +
-                1,
+                current.totalWins + 1,
 
               biggestWin:
                 Math.max(
@@ -679,9 +835,7 @@ export default function HomeScreen() {
 
               jackpotsWon:
                 current.jackpotsWon +
-                (jackpotWin > 0
-                  ? 1
-                  : 0),
+                (jackpotWin > 0 ? 1 : 0),
 
               biggestJackpot:
                 Math.max(
@@ -711,6 +865,7 @@ export default function HomeScreen() {
           );
 
           Vibration.vibrate(400);
+
         } else if (
           totalWin >= bet * 20
         ) {
@@ -725,6 +880,7 @@ export default function HomeScreen() {
           );
 
           Vibration.vibrate(250);
+
         } else if (
           totalWin >= bet * 10
         ) {
@@ -739,9 +895,8 @@ export default function HomeScreen() {
           );
 
           Vibration.vibrate(180);
-        } else if (
-          totalWin > 0
-        ) {
+
+        } else if (totalWin > 0) {
           playSound(winPlayer);
 
           setMessage(
@@ -749,12 +904,12 @@ export default function HomeScreen() {
           );
 
           Vibration.vibrate(120);
-        } else if (
-          freeAward > 0
-        ) {
+
+        } else if (freeAward > 0) {
           setMessage(
             `🌐 ${freeAward} FREE SPINS`
           );
+
         } else {
           setMessage(
             "GOOD LUCK!"
@@ -778,10 +933,14 @@ export default function HomeScreen() {
     }
 
     const timer =
-      setTimeout(spin, 900);
+      setTimeout(
+        spin,
+        900
+      );
 
     return () =>
       clearTimeout(timer);
+
   }, [
     autoSpin,
     spinning,
@@ -808,11 +967,14 @@ export default function HomeScreen() {
       return;
     }
 
-    let streak = dailyStreak;
+    let streak =
+      dailyStreak;
 
     if (lastDailyClaim) {
       const last =
-        new Date(lastDailyClaim);
+        new Date(
+          lastDailyClaim
+        );
 
       const now =
         new Date();
@@ -824,13 +986,13 @@ export default function HomeScreen() {
         );
 
       if (difference === 1) {
-        streak = Math.min(
-          7,
-          dailyStreak + 1
-        );
-      } else if (
-        difference > 1
-      ) {
+        streak =
+          Math.min(
+            7,
+            dailyStreak + 1
+          );
+
+      } else if (difference > 1) {
         streak = 1;
       }
     }
@@ -869,9 +1031,7 @@ export default function HomeScreen() {
           value + 500
       );
 
-      setSpinMissionClaimed(
-        true
-      );
+      setSpinMissionClaimed(true);
 
       setMessage(
         "MISSION +500"
@@ -889,9 +1049,7 @@ export default function HomeScreen() {
           value + 750
       );
 
-      setWinMissionClaimed(
-        true
-      );
+      setWinMissionClaimed(true);
 
       setMessage(
         "MISSION +750"
@@ -934,28 +1092,35 @@ export default function HomeScreen() {
       unlocked:
         stats.totalSpins >= 100,
     },
+
     {
-      title: "WINNER",
+      title:
+        "WINNER",
       unlocked:
         stats.totalWins >= 25,
     },
+
     {
       title:
         "JACKPOT HUNTER",
       unlocked:
         stats.jackpotsWon >= 1,
     },
+
     {
-      title: "BIG MONEY",
+      title:
+        "BIG MONEY",
       unlocked:
         stats.biggestWin >= 1000,
     },
+
     {
       title:
         "WORLD TRAVELER",
       unlocked:
         collectedFlags.length >= 50,
     },
+
     {
       title:
         "MASTER COLLECTOR",
@@ -964,19 +1129,28 @@ export default function HomeScreen() {
     },
   ];
 
-  const getColumn = (
-    column
-  ) => [
-    displayReels[column],
-    displayReels[5 + column],
-    displayReels[10 + column],
-  ];
+  const getColumn =
+    (column) => [
+      displayReels[column],
+      displayReels[5 + column],
+      displayReels[10 + column],
+    ];
 
   const winScale =
     winPulse.interpolate({
       inputRange: [0, 1],
-      outputRange: [1, 1.12],
+
+      outputRange: [
+        1,
+        1.12,
+      ],
     });
+
+  const myOnlineRank =
+    leaderboard.findIndex(
+      (row) =>
+        row.user_id === playerId
+    );
 
   return (
     <SafeAreaView
@@ -990,41 +1164,43 @@ export default function HomeScreen() {
           false
         }
       >
-        <Text
-          style={styles.title}
-        >
+        <Text style={styles.title}>
           🌍 WORLD FLAGS SLOT 🌍
         </Text>
 
-        <Text
-          style={styles.subtitle}
-        >
+        <Text style={styles.subtitle}>
           193 UN MEMBER STATES
         </Text>
 
-        <View
-          style={styles.topInfo}
-        >
-          <Text
-            style={styles.level}
-          >
+        <View style={styles.topInfo}>
+          <Text style={styles.level}>
             LEVEL {level}
           </Text>
 
-          <Text
-            style={styles.xp}
-          >
+          <Text style={styles.xp}>
             XP {xp}/{XP_PER_LEVEL}
           </Text>
 
           {vip && (
-            <Text
-              style={styles.vip}
-            >
+            <Text style={styles.vip}>
               👑 VIP
             </Text>
           )}
         </View>
+
+        <Text
+          style={
+            onlineStatus === "ONLINE"
+              ? styles.online
+              : styles.offline
+          }
+        >
+          {onlineStatus === "ONLINE"
+            ? "● ONLINE"
+            : onlineStatus === "CONNECTING"
+            ? "● CONNECTING"
+            : "● OFFLINE"}
+        </Text>
 
         <TouchableOpacity
           style={[
@@ -1038,44 +1214,24 @@ export default function HomeScreen() {
             )
           }
         >
-          <Text
-            style={
-              styles.soundText
-            }
-          >
+          <Text style={styles.soundText}>
             {soundEnabled
               ? "🔊 SOUND ON"
               : "🔇 SOUND OFF"}
           </Text>
         </TouchableOpacity>
 
-        <View
-          style={
-            styles.jackpotBox
-          }
-        >
-          <Text
-            style={
-              styles.jackpotTitle
-            }
-          >
+        <View style={styles.jackpotBox}>
+          <Text style={styles.jackpotTitle}>
             💎 JACKPOT
           </Text>
 
-          <Text
-            style={
-              styles.jackpotValue
-            }
-          >
+          <Text style={styles.jackpotValue}>
             {jackpot}
           </Text>
         </View>
 
-        <View
-          style={
-            styles.statsRow
-          }
-        >
+        <View style={styles.statsRow}>
           <Stat
             title="BALANCE"
             value={balance}
@@ -1092,9 +1248,7 @@ export default function HomeScreen() {
           />
         </View>
 
-        <View
-          style={styles.slot}
-        >
+        <View style={styles.slot}>
           {[0, 1, 2, 3, 4].map(
             (column) => {
               const move =
@@ -1119,6 +1273,7 @@ export default function HomeScreen() {
                   key={column}
                   style={[
                     styles.column,
+
                     {
                       transform: [
                         {
@@ -1129,9 +1284,7 @@ export default function HomeScreen() {
                     },
                   ]}
                 >
-                  {getColumn(
-                    column
-                  ).map(
+                  {getColumn(column).map(
                     (
                       symbol,
                       row
@@ -1150,8 +1303,10 @@ export default function HomeScreen() {
                           key={row}
                           style={[
                             styles.cell,
+
                             isWinner &&
                               styles.winningCell,
+
                             {
                               transform: [
                                 {
@@ -1167,6 +1322,7 @@ export default function HomeScreen() {
                           <Text
                             style={[
                               styles.symbol,
+
                               isWinner &&
                                 styles.winningSymbol,
                             ]}
@@ -1174,34 +1330,25 @@ export default function HomeScreen() {
                             {symbol}
                           </Text>
 
-                          {symbol ===
-                            WILD && (
+                          {symbol === WILD && (
                             <Text
-                              style={
-                                styles.label
-                              }
+                              style={styles.label}
                             >
                               WILD
                             </Text>
                           )}
 
-                          {symbol ===
-                            GLOBE && (
+                          {symbol === GLOBE && (
                             <Text
-                              style={
-                                styles.label
-                              }
+                              style={styles.label}
                             >
                               SCATTER
                             </Text>
                           )}
 
-                          {symbol ===
-                            JACKPOT && (
+                          {symbol === JACKPOT && (
                             <Text
-                              style={
-                                styles.label
-                              }
+                              style={styles.label}
                             >
                               JACKPOT
                             </Text>
@@ -1216,23 +1363,17 @@ export default function HomeScreen() {
           )}
         </View>
 
-        <Text
-          style={styles.message}
-        >
+        <Text style={styles.message}>
           {loaded
             ? message
             : "LOADING..."}
         </Text>
 
-        <Text
-          style={styles.free}
-        >
+        <Text style={styles.free}>
           FREE SPINS: {freeSpins}
         </Text>
 
-        <View
-          style={styles.betRow}
-        >
+        <View style={styles.betRow}>
           <SmallButton
             text="BET -"
             onPress={() => {
@@ -1273,11 +1414,7 @@ export default function HomeScreen() {
           />
         </View>
 
-        <View
-          style={
-            styles.actionRow
-          }
-        >
+        <View style={styles.actionRow}>
           <TouchableOpacity
             style={[
               styles.autoButton,
@@ -1290,11 +1427,7 @@ export default function HomeScreen() {
               )
             }
           >
-            <Text
-              style={
-                styles.buttonText
-              }
-            >
+            <Text style={styles.buttonText}>
               {autoSpin
                 ? "STOP AUTO"
                 : "AUTO SPIN"}
@@ -1310,11 +1443,7 @@ export default function HomeScreen() {
             disabled={spinning}
             onPress={spin}
           >
-            <Text
-              style={
-                styles.spinText
-              }
-            >
+            <Text style={styles.spinText}>
               {spinning
                 ? "SPINNING"
                 : "SPIN"}
@@ -1322,11 +1451,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        <View
-          style={
-            styles.menuGrid
-          }
-        >
+        <View style={styles.menuGrid}>
           <MenuButton
             text="💰 PAYTABLE"
             onPress={() => {
@@ -1364,10 +1489,8 @@ export default function HomeScreen() {
           />
 
           <MenuButton
-            text="🏆 RANK"
-            onPress={() =>
-              setModal("rank")
-            }
+            text="🌐 WORLD RANK"
+            onPress={openRank}
           />
 
           <MenuButton
@@ -1385,11 +1508,7 @@ export default function HomeScreen() {
           />
         </View>
 
-        <Text
-          style={
-            styles.testNotice
-          }
-        >
+        <Text style={styles.testNotice}>
           TEST VERSION — VIRTUAL CREDITS ONLY
         </Text>
       </ScrollView>
@@ -1406,17 +1525,17 @@ export default function HomeScreen() {
 
             <Card>
               <CardTitle text="STANDARD FLAGS" />
-              <Info text="3 = ×3   •   4 = ×8   •   5 = ×20" />
+              <Info text="3 = ×3 • 4 = ×8 • 5 = ×20" />
             </Card>
 
             <Card>
               <CardTitle text="MID FLAGS" />
-              <Info text="3 = ×4   •   4 = ×12   •   5 = ×30" />
+              <Info text="3 = ×4 • 4 = ×12 • 5 = ×30" />
             </Card>
 
             <Card>
               <CardTitle text="PREMIUM FLAGS" />
-              <Info text="3 = ×5   •   4 = ×15   •   5 = ×40" />
+              <Info text="3 = ×5 • 4 = ×15 • 5 = ×40" />
             </Card>
 
             <Card>
@@ -1426,12 +1545,12 @@ export default function HomeScreen() {
 
             <Card>
               <CardTitle text="🌐 FREE SPINS" />
-              <Info text="3 = 8   •   4 = 12   •   5+ = 20" />
+              <Info text="3 = 8 • 4 = 12 • 5+ = 20" />
             </Card>
 
             <Card>
               <CardTitle text="💎 JACKPOT" />
-              <Info text="3 or more diamonds anywhere win the full progressive jackpot." />
+              <Info text="3 or more diamonds anywhere win the full jackpot." />
             </Card>
 
             <Card>
@@ -1462,9 +1581,7 @@ export default function HomeScreen() {
                     ? "CLAIMED"
                     : "CLAIM 500"
                 }
-                onPress={
-                  claimSpinMission
-                }
+                onPress={claimSpinMission}
               />
             </Card>
 
@@ -1485,9 +1602,7 @@ export default function HomeScreen() {
                     ? "CLAIMED"
                     : "CLAIM 750"
                 }
-                onPress={
-                  claimWinMission
-                }
+                onPress={claimWinMission}
               />
             </Card>
           </>
@@ -1517,9 +1632,7 @@ export default function HomeScreen() {
 
               <ClaimButton
                 text="CLAIM DAILY BONUS"
-                onPress={
-                  claimDaily
-                }
+                onPress={claimDaily}
               />
             </Card>
           </>
@@ -1530,34 +1643,13 @@ export default function HomeScreen() {
             <ModalTitle text="👤 PROFILE" />
 
             <Card>
-              <Info
-                text={`Level: ${level}`}
-              />
-
-              <Info
-                text={`XP: ${xp}/100`}
-              />
-
-              <Info
-                text={`Total spins: ${stats.totalSpins}`}
-              />
-
-              <Info
-                text={`Total wins: ${stats.totalWins}`}
-              />
-
-              <Info
-                text={`Biggest win: ${stats.biggestWin}`}
-              />
-
-              <Info
-                text={`Jackpots won: ${stats.jackpotsWon}`}
-              />
-
-              <Info
-                text={`Flags: ${collectedFlags.length}/193`}
-              />
-
+              <Info text={`Level: ${level}`} />
+              <Info text={`XP: ${xp}/100`} />
+              <Info text={`Total spins: ${stats.totalSpins}`} />
+              <Info text={`Total wins: ${stats.totalWins}`} />
+              <Info text={`Biggest win: ${stats.biggestWin}`} />
+              <Info text={`Jackpots won: ${stats.jackpotsWon}`} />
+              <Info text={`Flags: ${collectedFlags.length}/193`} />
               <Info
                 text={`VIP: ${
                   vip
@@ -1565,13 +1657,8 @@ export default function HomeScreen() {
                     : "NO"
                 }`}
               />
-
               <Info
-                text={`Sound: ${
-                  soundEnabled
-                    ? "ON"
-                    : "OFF"
-                }`}
+                text={`Online: ${onlineStatus}`}
               />
             </Card>
           </>
@@ -1583,16 +1670,9 @@ export default function HomeScreen() {
               text={`🌍 FLAG COLLECTION ${collectedFlags.length}/193`}
             />
 
-            <View
-              style={
-                styles.flagGrid
-              }
-            >
+            <View style={styles.flagGrid}>
               {flags.map(
-                (
-                  flag,
-                  index
-                ) => {
+                (flag, index) => {
                   const unlocked =
                     collectedFlags.includes(
                       flag
@@ -1601,14 +1681,10 @@ export default function HomeScreen() {
                   return (
                     <View
                       key={index}
-                      style={
-                        styles.flagCell
-                      }
+                      style={styles.flagCell}
                     >
                       <Text
-                        style={
-                          styles.flagIcon
-                        }
+                        style={styles.flagIcon}
                       >
                         {unlocked
                           ? flag
@@ -1624,35 +1700,91 @@ export default function HomeScreen() {
 
         {modal === "rank" && (
           <>
-            <ModalTitle text="🏆 LOCAL RANK" />
+            <ModalTitle text="🌐 WORLD LEADERBOARD" />
 
             <Card>
-              <Info
-                text={`Highest level: ${highestLevel}`}
+              <CardTitle text="PLAYER NAME" />
+
+              <TextInput
+                value={playerName}
+                onChangeText={setPlayerName}
+                maxLength={20}
+                placeholder="PLAYER"
+                placeholderTextColor="#7890a8"
+                style={styles.nameInput}
               />
 
-              <Info
-                text={`Biggest win: ${stats.biggestWin}`}
-              />
-
-              <Info
-                text={`Biggest jackpot: ${stats.biggestJackpot}`}
-              />
-
-              <Info
-                text={`Flags collected: ${collectedFlags.length}/193`}
-              />
-
-              <Info
-                text={`Total wins: ${stats.totalWins}`}
-              />
-
-              <Info
-                text={`Total spins: ${stats.totalSpins}`}
+              <ClaimButton
+                text="SAVE NAME"
+                onPress={savePlayerName}
               />
             </Card>
 
-            <Info text="Local statistics only — online leaderboard comes later." />
+            {myOnlineRank >= 0 && (
+              <Text style={styles.myRank}>
+                YOUR WORLD RANK: #{myOnlineRank + 1}
+              </Text>
+            )}
+
+            <TouchableOpacity
+              style={styles.refreshButton}
+              onPress={refreshLeaderboard}
+            >
+              <Text style={styles.buttonText}>
+                REFRESH
+              </Text>
+            </TouchableOpacity>
+
+            {leaderboardLoading ? (
+              <ActivityIndicator
+                size="large"
+              />
+            ) : (
+              leaderboard.map(
+                (item, index) => (
+                  <View
+                    key={item.user_id}
+                    style={[
+                      styles.rankRow,
+
+                      item.user_id ===
+                        playerId &&
+                        styles.myRankRow,
+                    ]}
+                  >
+                    <Text style={styles.rankNumber}>
+                      #{index + 1}
+                    </Text>
+
+                    <View style={styles.rankMiddle}>
+                      <Text style={styles.rankName}>
+                        {item.player_name}
+                      </Text>
+
+                      <Text style={styles.rankSmall}>
+                        LVL {item.highest_level} • 🌍{" "}
+                        {item.flags_collected}/193
+                      </Text>
+                    </View>
+
+                    <Text style={styles.rankScore}>
+                      {item.biggest_win}
+                    </Text>
+                  </View>
+                )
+              )
+            )}
+
+            {leaderboard.length === 0 &&
+              !leaderboardLoading && (
+                <Info
+                  text={
+                    onlineStatus === "OFFLINE"
+                      ? "No internet connection or Supabase is unavailable."
+                      : "No online players yet."
+                  }
+                />
+              )}
           </>
         )}
 
@@ -1662,11 +1794,7 @@ export default function HomeScreen() {
 
             {achievements.map(
               (item) => (
-                <Card
-                  key={
-                    item.title
-                  }
-                >
+                <Card key={item.title}>
                   <CardTitle
                     text={
                       item.unlocked
@@ -1684,38 +1812,28 @@ export default function HomeScreen() {
           <>
             <ModalTitle text="🛒 TEST SHOP" />
 
-            <Text
-              style={
-                styles.warning
-              }
-            >
+            <Text style={styles.warning}>
               NO REAL MONEY — TEST CREDITS ONLY
             </Text>
 
             <ShopButton
               text="+5,000 TEST CREDITS"
               onPress={() =>
-                buyTestCredits(
-                  5000
-                )
+                buyTestCredits(5000)
               }
             />
 
             <ShopButton
               text="+15,000 TEST CREDITS"
               onPress={() =>
-                buyTestCredits(
-                  15000
-                )
+                buyTestCredits(15000)
               }
             />
 
             <ShopButton
               text="+50,000 TEST CREDITS"
               onPress={() =>
-                buyTestCredits(
-                  50000
-                )
+                buyTestCredits(50000)
               }
             />
 
@@ -1733,9 +1851,7 @@ export default function HomeScreen() {
                     ? "VIP ACTIVE"
                     : "ACTIVATE TEST VIP"
                 }
-                onPress={
-                  activateVip
-                }
+                onPress={activateVip}
               />
             </Card>
           </>
@@ -1752,46 +1868,26 @@ export default function HomeScreen() {
       >
         <TouchableOpacity
           activeOpacity={1}
-          style={
-            styles.bigWinOverlay
-          }
+          style={styles.bigWinOverlay}
           onPress={() =>
             setBigWinText(null)
           }
         >
-          <View
-            style={
-              styles.bigWinBox
-            }
-          >
-            <Text
-              style={
-                styles.bigWinStars
-              }
-            >
+          <View style={styles.bigWinBox}>
+            <Text style={styles.bigWinStars}>
               ✨ ⭐ ✨
             </Text>
 
-            <Text
-              style={
-                styles.bigWinText
-              }
-            >
+            <Text style={styles.bigWinText}>
               {bigWinText}
             </Text>
 
-            <Text
-              style={
-                styles.bigWinStars
-              }
-            >
+            <Text style={styles.bigWinStars}>
               ✨ ⭐ ✨
             </Text>
           </View>
 
-          <Text
-            style={styles.tapText}
-          >
+          <Text style={styles.tapText}>
             TAP TO CONTINUE
           </Text>
         </TouchableOpacity>
@@ -1800,67 +1896,40 @@ export default function HomeScreen() {
   );
 }
 
-function Stat({
-  title,
-  value,
-}) {
+function Stat({ title, value }) {
   return (
     <View style={styles.stat}>
-      <Text
-        style={
-          styles.statTitle
-        }
-      >
+      <Text style={styles.statTitle}>
         {title}
       </Text>
 
-      <Text
-        style={
-          styles.statValue
-        }
-      >
+      <Text style={styles.statValue}>
         {value}
       </Text>
     </View>
   );
 }
 
-function SmallButton({
-  text,
-  onPress,
-}) {
+function SmallButton({ text, onPress }) {
   return (
     <TouchableOpacity
-      style={
-        styles.smallButton
-      }
+      style={styles.smallButton}
       onPress={onPress}
     >
-      <Text
-        style={
-          styles.buttonText
-        }
-      >
+      <Text style={styles.buttonText}>
         {text}
       </Text>
     </TouchableOpacity>
   );
 }
 
-function MenuButton({
-  text,
-  onPress,
-}) {
+function MenuButton({ text, onPress }) {
   return (
     <TouchableOpacity
-      style={
-        styles.menuButton
-      }
+      style={styles.menuButton}
       onPress={onPress}
     >
-      <Text
-        style={styles.menuText}
-      >
+      <Text style={styles.menuText}>
         {text}
       </Text>
     </TouchableOpacity>
@@ -1877,38 +1946,20 @@ function GameModal({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={
-        onClose
-      }
+      onRequestClose={onClose}
     >
-      <View
-        style={
-          styles.modalBackground
-        }
-      >
-        <View
-          style={
-            styles.modalBox
-          }
-        >
+      <View style={styles.modalBackground}>
+        <View style={styles.modalBox}>
           <ScrollView
-            showsVerticalScrollIndicator={
-              false
-            }
+            showsVerticalScrollIndicator={false}
           >
             {children}
 
             <TouchableOpacity
-              style={
-                styles.closeButton
-              }
+              style={styles.closeButton}
               onPress={onClose}
             >
-              <Text
-                style={
-                  styles.closeText
-                }
-              >
+              <Text style={styles.closeText}>
                 CLOSE
               </Text>
             </TouchableOpacity>
@@ -1919,23 +1970,15 @@ function GameModal({
   );
 }
 
-function ModalTitle({
-  text,
-}) {
+function ModalTitle({ text }) {
   return (
-    <Text
-      style={
-        styles.modalTitle
-      }
-    >
+    <Text style={styles.modalTitle}>
       {text}
     </Text>
   );
 }
 
-function Card({
-  children,
-}) {
+function Card({ children }) {
   return (
     <View style={styles.card}>
       {children}
@@ -1943,15 +1986,9 @@ function Card({
   );
 }
 
-function CardTitle({
-  text,
-}) {
+function CardTitle({ text }) {
   return (
-    <Text
-      style={
-        styles.cardTitle
-      }
-    >
+    <Text style={styles.cardTitle}>
       {text}
     </Text>
   );
@@ -1959,9 +1996,7 @@ function CardTitle({
 
 function Info({ text }) {
   return (
-    <Text
-      style={styles.info}
-    >
+    <Text style={styles.info}>
       {text}
     </Text>
   );
@@ -1978,15 +2013,10 @@ function ClaimButton({
       onPress={onPress}
       style={[
         styles.claimButton,
-        disabled &&
-          styles.disabled,
+        disabled && styles.disabled,
       ]}
     >
-      <Text
-        style={
-          styles.claimText
-        }
-      >
+      <Text style={styles.claimText}>
         {text}
       </Text>
     </TouchableOpacity>
@@ -1999,452 +2029,493 @@ function ShopButton({
 }) {
   return (
     <TouchableOpacity
-      style={
-        styles.shopButton
-      }
+      style={styles.shopButton}
       onPress={onPress}
     >
-      <Text
-        style={
-          styles.shopText
-        }
-      >
+      <Text style={styles.shopText}>
         {text}
       </Text>
     </TouchableOpacity>
   );
 }
 
-const styles =
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor:
-        "#07111f",
-    },
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#07111f",
+  },
 
-    page: {
-      alignItems: "center",
-      padding: 10,
-      paddingBottom: 40,
-    },
+  page: {
+    alignItems: "center",
+    padding: 10,
+    paddingBottom: 40,
+  },
 
-    title: {
-      color: "white",
-      fontSize: 22,
-      fontWeight: "bold",
-      textAlign: "center",
-    },
+  title: {
+    color: "white",
+    fontSize: 22,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
 
-    subtitle: {
-      color: "#8fa8c5",
-      fontSize: 11,
-      marginBottom: 8,
-    },
+  subtitle: {
+    color: "#8fa8c5",
+    fontSize: 11,
+    marginBottom: 8,
+  },
 
-    topInfo: {
-      flexDirection: "row",
-      gap: 12,
-      marginBottom: 7,
-    },
+  topInfo: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 4,
+  },
 
-    level: {
-      color: "#ffd54a",
-      fontWeight: "bold",
-    },
+  level: {
+    color: "#ffd54a",
+    fontWeight: "bold",
+  },
 
-    xp: {
-      color: "#7fd6e4",
-      fontWeight: "bold",
-    },
+  xp: {
+    color: "#7fd6e4",
+    fontWeight: "bold",
+  },
 
-    vip: {
-      color: "#ffd54a",
-      fontWeight: "bold",
-    },
+  vip: {
+    color: "#ffd54a",
+    fontWeight: "bold",
+  },
 
-    soundButton: {
-      backgroundColor:
-        "#1d6645",
-      paddingVertical: 7,
-      paddingHorizontal: 18,
-      borderRadius: 20,
-      marginBottom: 8,
-    },
+  online: {
+    color: "#58dd8b",
+    fontSize: 10,
+    fontWeight: "bold",
+    marginBottom: 5,
+  },
 
-    soundOff: {
-      backgroundColor:
-        "#5a2630",
-    },
+  offline: {
+    color: "#ff7777",
+    fontSize: 10,
+    fontWeight: "bold",
+    marginBottom: 5,
+  },
 
-    soundText: {
-      color: "white",
-      fontSize: 11,
-      fontWeight: "bold",
-    },
+  soundButton: {
+    backgroundColor: "#1d6645",
+    paddingVertical: 7,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    marginBottom: 8,
+  },
 
-    jackpotBox: {
-      backgroundColor:
-        "#241b07",
-      borderColor:
-        "#e7b51c",
-      borderWidth: 2,
-      borderRadius: 12,
-      paddingVertical: 7,
-      paddingHorizontal: 40,
-      alignItems: "center",
-      marginBottom: 10,
-    },
+  soundOff: {
+    backgroundColor: "#5a2630",
+  },
 
-    jackpotTitle: {
-      color: "#ffd54a",
-      fontWeight: "bold",
-    },
+  soundText: {
+    color: "white",
+    fontSize: 11,
+    fontWeight: "bold",
+  },
 
-    jackpotValue: {
-      color: "white",
-      fontSize: 22,
-      fontWeight: "bold",
-    },
+  jackpotBox: {
+    backgroundColor: "#241b07",
+    borderColor: "#e7b51c",
+    borderWidth: 2,
+    borderRadius: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 40,
+    alignItems: "center",
+    marginBottom: 10,
+  },
 
-    statsRow: {
-      width: "100%",
-      maxWidth: 420,
-      flexDirection: "row",
-      justifyContent:
-        "space-between",
-      marginBottom: 8,
-    },
+  jackpotTitle: {
+    color: "#ffd54a",
+    fontWeight: "bold",
+  },
 
-    stat: {
-      width: "31%",
-      backgroundColor:
-        "#14243a",
-      padding: 8,
-      borderRadius: 8,
-      alignItems: "center",
-    },
+  jackpotValue: {
+    color: "white",
+    fontSize: 22,
+    fontWeight: "bold",
+  },
 
-    statTitle: {
-      color: "#8fa8c5",
-      fontSize: 10,
-    },
+  statsRow: {
+    width: "100%",
+    maxWidth: 420,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
 
-    statValue: {
-      color: "white",
-      fontSize: 18,
-      fontWeight: "bold",
-    },
+  stat: {
+    width: "31%",
+    backgroundColor: "#14243a",
+    padding: 8,
+    borderRadius: 8,
+    alignItems: "center",
+  },
 
-    slot: {
-      width: "100%",
-      maxWidth: 420,
-      height: 235,
-      flexDirection: "row",
-      backgroundColor:
-        "#14243a",
-      padding: 5,
-      borderRadius: 12,
-      overflow: "hidden",
-    },
+  statTitle: {
+    color: "#8fa8c5",
+    fontSize: 10,
+  },
 
-    column: {
-      width: "20%",
-    },
+  statValue: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
 
-    cell: {
-      height: 75,
-      backgroundColor:
-        "white",
-      borderColor:
-        "#14243a",
-      borderWidth: 2,
-      borderRadius: 7,
-      alignItems: "center",
-      justifyContent:
-        "center",
-    },
+  slot: {
+    width: "100%",
+    maxWidth: 420,
+    height: 235,
+    flexDirection: "row",
+    backgroundColor: "#14243a",
+    padding: 5,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
 
-    winningCell: {
-      backgroundColor:
-        "#fff3b0",
-      borderColor:
-        "#ffd000",
-      borderWidth: 4,
-      zIndex: 20,
-      elevation: 10,
-    },
+  column: {
+    width: "20%",
+  },
 
-    symbol: {
-      fontSize: 34,
-    },
+  cell: {
+    height: 75,
+    backgroundColor: "white",
+    borderColor: "#14243a",
+    borderWidth: 2,
+    borderRadius: 7,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
-    winningSymbol: {
-      fontSize: 39,
-    },
+  winningCell: {
+    backgroundColor: "#fff3b0",
+    borderColor: "#ffd000",
+    borderWidth: 4,
+    zIndex: 20,
+    elevation: 10,
+  },
 
-    label: {
-      fontSize: 7,
-      fontWeight: "bold",
-    },
+  symbol: {
+    fontSize: 34,
+  },
 
-    message: {
-      color: "#ffd54a",
-      fontSize: 16,
-      fontWeight: "bold",
-      marginTop: 8,
-      minHeight: 23,
-      textAlign: "center",
-    },
+  winningSymbol: {
+    fontSize: 39,
+  },
 
-    free: {
-      color: "#7fd6e4",
-      marginBottom: 8,
-    },
+  label: {
+    fontSize: 7,
+    fontWeight: "bold",
+  },
 
-    betRow: {
-      flexDirection: "row",
-      gap: 8,
-      marginBottom: 10,
-    },
+  message: {
+    color: "#ffd54a",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginTop: 8,
+    minHeight: 23,
+    textAlign: "center",
+  },
 
-    smallButton: {
-      backgroundColor:
-        "#253e5e",
-      paddingVertical: 9,
-      paddingHorizontal: 20,
-      borderRadius: 10,
-    },
+  free: {
+    color: "#7fd6e4",
+    marginBottom: 8,
+  },
 
-    actionRow: {
-      flexDirection: "row",
-      gap: 10,
-      marginBottom: 14,
-    },
+  betRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 10,
+  },
 
-    autoButton: {
-      backgroundColor:
-        "#253e5e",
-      minWidth: 125,
-      paddingVertical: 15,
-      borderRadius: 30,
-      alignItems: "center",
-    },
+  smallButton: {
+    backgroundColor: "#253e5e",
+    paddingVertical: 9,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+  },
 
-    autoActive: {
-      backgroundColor:
-        "#8b2635",
-    },
+  actionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 14,
+  },
 
-    spinButton: {
-      backgroundColor:
-        "#e7b51c",
-      width: 150,
-      paddingVertical: 15,
-      borderRadius: 30,
-      alignItems: "center",
-    },
+  autoButton: {
+    backgroundColor: "#253e5e",
+    minWidth: 125,
+    paddingVertical: 15,
+    borderRadius: 30,
+    alignItems: "center",
+  },
 
-    spinText: {
-      color: "#07111f",
-      fontSize: 20,
-      fontWeight: "bold",
-    },
+  autoActive: {
+    backgroundColor: "#8b2635",
+  },
 
-    buttonText: {
-      color: "white",
-      fontWeight: "bold",
-    },
+  spinButton: {
+    backgroundColor: "#e7b51c",
+    width: 150,
+    paddingVertical: 15,
+    borderRadius: 30,
+    alignItems: "center",
+  },
 
-    disabled: {
-      opacity: 0.45,
-    },
+  spinText: {
+    color: "#07111f",
+    fontSize: 20,
+    fontWeight: "bold",
+  },
 
-    menuGrid: {
-      width: "100%",
-      maxWidth: 420,
-      flexDirection: "row",
-      flexWrap: "wrap",
-      justifyContent:
-        "space-between",
-    },
+  buttonText: {
+    color: "white",
+    fontWeight: "bold",
+  },
 
-    menuButton: {
-      width: "48.5%",
-      backgroundColor:
-        "#14243a",
-      borderRadius: 10,
-      paddingVertical: 12,
-      marginBottom: 8,
-      alignItems: "center",
-    },
+  disabled: {
+    opacity: 0.45,
+  },
 
-    menuText: {
-      color: "white",
-      fontSize: 12,
-      fontWeight: "bold",
-    },
+  menuGrid: {
+    width: "100%",
+    maxWidth: 420,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
 
-    testNotice: {
-      color: "#70849c",
-      fontSize: 10,
-      marginTop: 8,
-    },
+  menuButton: {
+    width: "48.5%",
+    backgroundColor: "#14243a",
+    borderRadius: 10,
+    paddingVertical: 12,
+    marginBottom: 8,
+    alignItems: "center",
+  },
 
-    modalBackground: {
-      flex: 1,
-      backgroundColor:
-        "rgba(0,0,0,0.88)",
-      justifyContent:
-        "center",
-      padding: 18,
-    },
+  menuText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
 
-    modalBox: {
-      maxHeight: "88%",
-      backgroundColor:
-        "#101f33",
-      borderColor:
-        "#e7b51c",
-      borderWidth: 2,
-      borderRadius: 18,
-      padding: 18,
-    },
+  testNotice: {
+    color: "#70849c",
+    fontSize: 10,
+    marginTop: 8,
+  },
 
-    modalTitle: {
-      color: "#ffd54a",
-      fontSize: 23,
-      fontWeight: "bold",
-      textAlign: "center",
-      marginBottom: 15,
-    },
+  modalBackground: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.88)",
+    justifyContent: "center",
+    padding: 18,
+  },
 
-    card: {
-      backgroundColor:
-        "#192d48",
-      padding: 12,
-      borderRadius: 10,
-      marginBottom: 9,
-    },
+  modalBox: {
+    maxHeight: "88%",
+    backgroundColor: "#101f33",
+    borderColor: "#e7b51c",
+    borderWidth: 2,
+    borderRadius: 18,
+    padding: 18,
+  },
 
-    cardTitle: {
-      color: "white",
-      fontWeight: "bold",
-      marginBottom: 5,
-    },
+  modalTitle: {
+    color: "#ffd54a",
+    fontSize: 23,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 15,
+  },
 
-    info: {
-      color: "#c7d5e5",
-      marginVertical: 2,
-    },
+  card: {
+    backgroundColor: "#192d48",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 9,
+  },
 
-    claimButton: {
-      backgroundColor:
-        "#e7b51c",
-      padding: 10,
-      borderRadius: 20,
-      alignItems: "center",
-      marginTop: 10,
-    },
+  cardTitle: {
+    color: "white",
+    fontWeight: "bold",
+    marginBottom: 5,
+  },
 
-    claimText: {
-      color: "#07111f",
-      fontWeight: "bold",
-    },
+  info: {
+    color: "#c7d5e5",
+    marginVertical: 2,
+  },
 
-    shopButton: {
-      backgroundColor:
-        "#253e5e",
-      padding: 13,
-      borderRadius: 10,
-      marginBottom: 8,
-      alignItems: "center",
-    },
+  claimButton: {
+    backgroundColor: "#e7b51c",
+    padding: 10,
+    borderRadius: 20,
+    alignItems: "center",
+    marginTop: 10,
+  },
 
-    shopText: {
-      color: "white",
-      fontWeight: "bold",
-    },
+  claimText: {
+    color: "#07111f",
+    fontWeight: "bold",
+  },
 
-    warning: {
-      color: "#ffd54a",
-      textAlign: "center",
-      fontWeight: "bold",
-      marginBottom: 15,
-    },
+  shopButton: {
+    backgroundColor: "#253e5e",
+    padding: 13,
+    borderRadius: 10,
+    marginBottom: 8,
+    alignItems: "center",
+  },
 
-    flagGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-    },
+  shopText: {
+    color: "white",
+    fontWeight: "bold",
+  },
 
-    flagCell: {
-      width: "20%",
-      height: 52,
-      alignItems: "center",
-      justifyContent:
-        "center",
-      backgroundColor:
-        "#192d48",
-      borderWidth: 1,
-      borderColor:
-        "#101f33",
-    },
+  warning: {
+    color: "#ffd54a",
+    textAlign: "center",
+    fontWeight: "bold",
+    marginBottom: 15,
+  },
 
-    flagIcon: {
-      fontSize: 25,
-    },
+  flagGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
 
-    closeButton: {
-      backgroundColor:
-        "#e7b51c",
-      paddingVertical: 13,
-      borderRadius: 25,
-      alignItems: "center",
-      marginTop: 15,
-    },
+  flagCell: {
+    width: "20%",
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#192d48",
+    borderWidth: 1,
+    borderColor: "#101f33",
+  },
 
-    closeText: {
-      color: "#07111f",
-      fontWeight: "bold",
-    },
+  flagIcon: {
+    fontSize: 25,
+  },
 
-    bigWinOverlay: {
-      flex: 1,
-      backgroundColor:
-        "rgba(0,0,0,0.94)",
-      alignItems: "center",
-      justifyContent:
-        "center",
-    },
+  nameInput: {
+    backgroundColor: "#07111f",
+    color: "white",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#47617e",
+  },
 
-    bigWinBox: {
-      borderWidth: 3,
-      borderColor:
-        "#ffd54a",
-      borderRadius: 25,
-      paddingVertical: 30,
-      paddingHorizontal: 28,
-      backgroundColor:
-        "#241b07",
-      alignItems: "center",
-    },
+  myRank: {
+    color: "#ffd54a",
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 10,
+  },
 
-    bigWinStars: {
-      fontSize: 28,
-      marginVertical: 8,
-    },
+  refreshButton: {
+    backgroundColor: "#253e5e",
+    borderRadius: 20,
+    alignItems: "center",
+    padding: 10,
+    marginBottom: 10,
+  },
 
-    bigWinText: {
-      color: "#ffd54a",
-      fontSize: 38,
-      fontWeight: "bold",
-      textAlign: "center",
-    },
+  rankRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#192d48",
+    padding: 10,
+    borderRadius: 9,
+    marginBottom: 6,
+  },
 
-    tapText: {
-      color: "white",
-      marginTop: 30,
-      fontSize: 12,
-    },
-  });
+  myRankRow: {
+    borderWidth: 2,
+    borderColor: "#ffd54a",
+  },
+
+  rankNumber: {
+    color: "#ffd54a",
+    fontSize: 16,
+    fontWeight: "bold",
+    width: 42,
+  },
+
+  rankMiddle: {
+    flex: 1,
+  },
+
+  rankName: {
+    color: "white",
+    fontWeight: "bold",
+  },
+
+  rankSmall: {
+    color: "#8fa8c5",
+    fontSize: 10,
+    marginTop: 2,
+  },
+
+  rankScore: {
+    color: "#ffd54a",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+
+  closeButton: {
+    backgroundColor: "#e7b51c",
+    paddingVertical: 13,
+    borderRadius: 25,
+    alignItems: "center",
+    marginTop: 15,
+  },
+
+  closeText: {
+    color: "#07111f",
+    fontWeight: "bold",
+  },
+
+  bigWinOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.94)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  bigWinBox: {
+    borderWidth: 3,
+    borderColor: "#ffd54a",
+    borderRadius: 25,
+    paddingVertical: 30,
+    paddingHorizontal: 28,
+    backgroundColor: "#241b07",
+    alignItems: "center",
+  },
+
+  bigWinStars: {
+    fontSize: 28,
+    marginVertical: 8,
+  },
+
+  bigWinText: {
+    color: "#ffd54a",
+    fontSize: 38,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+
+  tapText: {
+    color: "white",
+    marginTop: 30,
+    fontSize: 12,
+  },
+});
